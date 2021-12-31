@@ -1,0 +1,22 @@
+import streamlit as st
+from multiapp import MultiApp
+from apps import a_deflection,b_points,c_polar,d_afatds,e_physics,f_sungrid,g_sunnorth  # import your app modules here
+st.set_page_config(layout="wide",)
+app = MultiApp()
+
+CURRENT_THEME = "dark"
+IS_DARK_THEME = True
+
+
+# Add all your application here
+app.add_app("Deflection", a_deflection.app)
+app.add_app("Point to Point", b_points.app)
+app.add_app("Polar", c_polar.app)
+app.add_app("AFATDS", d_afatds.app)
+app.add_app("Physics", e_physics.app)
+app.add_app("Sun to Grid", f_sungrid.app)
+app.add_app("Sun to North", g_sunnorth.app)
+
+# The main app
+app.run()
+

@@ -3,3 +3,5 @@ numpy
 pandas
 plotly
 sklearn
+folium
+streamlit_folium

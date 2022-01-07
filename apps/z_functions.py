@@ -4,6 +4,7 @@ import pandas as pd
 import requests
 import urllib.request
 import json
+import pygeodesy as pg 
 
 nd = pd.read_csv('data/northdes.csv')
 
@@ -171,3 +172,45 @@ def elevation(lat, lng):
     with urllib.request.urlopen('https://maps.googleapis.com/maps/api/elevation/json?'+"locations=%s,%s&sensor=%s" % (lat, lng, "false")+'&key=AIzaSyAfnLNZjvYdMx-cyga_qA1oJ6P36dRGalA') as f:
         response = json.loads(f.read().decode())    
         return response['results'][0]['elevation']
+
+def polar2LL(lat,lon,dir,dist):
+    # to radians
+    latr = lat*np.pi/180
+    lonr = lon*np.pi/180
+    dirr = dir*np.pi/180
+    er = 6371 #Earth Radius in km
+    delta = dist/er
+    
+    later = np.arcsin(np.sin(latr)*np.cos(delta)+np.cos(latr)*np.sin(delta)*np.cos(dirr))
+    loner = lonr + np.arctan2(np.sin(dirr)*np.sin(delta)*np.cos(latr),np.cos(delta)-np.sin(latr)*np.sin(later))
+    
+    # Back to Degrees
+    lated = later*180/np.pi
+    loned = loner*180/np.pi
+    
+    # Impact Bearing in Radians
+    impr = np.pi + np.arctan2(np.sin(lonr-loner)*np.cos(latr),np.cos(later)*np.sin(latr)-np.sin(later)*np.cos(latr)*np.cos(lonr-loner))
+    
+    # Impact Bearing in Degrees
+    impd = impr*180/np.pi
+    
+    # compute the midpoint in Radians
+    Bx = np.cos(later)*np.cos(loner-lonr)
+    By = np.cos(later)*np.sin(loner-lonr)
+    latmr = np.arctan2(np.sin(latr) + np.sin(later), np.sqrt((np.cos(latr)+Bx)**2+By**2))
+    lonmr = lonr + np.arctan2(By, np.cos(latr) + Bx)
+    # midpoint in degrees
+    latmd = latmr*180/np.pi
+    lonmd = lonmr*180/np.pi
+    
+    return [lated, loned, impd,latmd,lonmd]
+
+def P2P(lat1d,lon1d,lat2d,lon2d):
+    lbd = pg.bearing(lat1d,lon1d,lat2d,lon2d) #Launch Bearing in degrees
+    ibd = pg.bearing(lat2d,lon2d,lat1d,lon1d)-180 #impact Bearing in degrees
+    if ibd < 0: ibd = ibd + 360
+
+    # six different distances
+    dist = pg.cosineForsytheAndoyerLambert(lat1d,lon1d,lat2d,lon2d) # This is the best one   
+    
+    return [lbd,ibd,dist]

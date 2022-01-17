@@ -21,7 +21,7 @@ def app():
         out = zf.MGRS2LL(mgrs)
         st.write('UTM :',out[0])
         st.write('Lat: ',str(round(out[1],4)),' Lon: ',str(round(out[2],4)))
-        lu = st.text_input('Lookup: ')
+        lu = st.text_input('Lookup: ') 
         if len(lu)>=3:
             where = zf.lookup(lu)
             st.write(where[0])

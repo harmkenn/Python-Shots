@@ -21,7 +21,7 @@ def app():
         out = zf.MGRS2LL(mgrs)
         st.write('UTM :',out[0])
         st.write('Lat: ',str(round(out[1],4)),' Lon: ',str(round(out[2],4)))
-        lu = st.text_input('Lookup: ')
+        lu = st.text_input('Lookup: ') 
         if len(lu)>=3:
             where = zf.lookup(lu)
             st.write(where[0])
@@ -31,9 +31,9 @@ def app():
             st.write('Alt :'+str(round(alt,2))+' Meters')
     d1,d2 = st.columns((1,2))
     with d1:
-        aof = st.text_input('Target; Azimuth of Fire (mils): ',2000)
+        aof = float(st.text_input('Target; Azimuth of Fire (mils): ',2000))
         lpmgrs = st.text_input('Launch Point (MGRS):',back[1])
-        ipmgrs = st.text_input('Impact Point (MGRS):')
+        ipmgrs = st.text_input('Impact Point (MGRS):',back[1])
         lp = zf.MGRS2LL(lpmgrs)
         
         ip = zf.MGRS2LL(ipmgrs)
@@ -86,16 +86,29 @@ def app():
         tgt = folium.features.CustomIcon('Icons/target.png',icon_size=(25,25))
         folium.Marker(location=[lp[1],lp[2]], color='green',popup=lpmgrs, tooltip='Launch Point',icon=pal).add_to(map)
         folium.Marker(location=[ip[1],ip[2]], color='green',popup=ipmgrs, tooltip='Impact Point',icon=tgt).add_to(map)
+        pback = zf.polar2LL(lp[1],lp[2],int(aof)*180/3200,30) 
+        
+        # AOF line
+        folium.PolyLine([[lp[1],lp[2]],[pback[0],pback[1]]],tooltip='Azimuth of Fire',popup=aof).add_to(map)
+        # Gun Target line
+        folium.PolyLine([[lp[1],lp[2]],[ip[1],ip[2]]],color='red',tooltip='Gun Target Line',popup='gtl').add_to(map)
         # radius of the circle in meters
         folium.Circle(radius=30000, location=[lp[1],lp[2]], color='green').add_to(map)
-        # add Azimuth of Fire to map
-        #aoflat
-        #folium.PolyLine().add_to(map)
+        
         
         draw = plugins.Draw()
         draw.add_to(map)
         # display map
         folium_static(map) 
+        
+        with d1:
+            deets = zf.P2P(lp[1],lp[2],ip[1],ip[2])
+            st.write('Distance: ' + str(round(deets[2],0)) + ' meters')
+            st.write('Bearing: '+str(round(deets[0],2)) + ' degrees')
+            st.write('Azimuth: '+str(round(deets[0]*3200/180,2)) + ' mils')
+            diff =  round(aof-deets[0]*3200/180+3200,0)
+            st.write('Deflection: '+str(diff)+' mils')
+            
     
         
         

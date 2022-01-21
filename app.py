@@ -1,5 +1,6 @@
 import streamlit as st
 from multiapp import MultiApp
+from apps import z_functions as zf
 from apps import a_deflection,b_points,c_polar,d_afatds,e_physics,f_sungrid,g_sunnorth  # import your app modules here
 st.set_page_config(layout="wide",)
 app = MultiApp()

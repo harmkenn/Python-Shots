@@ -12,14 +12,14 @@ def app():
     st.markdown('Point to Point')
     c1,c2 = st.columns((1,3))
     with c1:
-        lu = st.text_input('Lookup: ') 
+        lu = st.sidebar.text_input('Lookup: ') 
         if len(lu)>=3:
             where = zf.lookup(lu)
-            st.write(where[0])
-            st.write('Lat: '+str(where[1])+' Lon: '+str(where[2]))
-            st.write('MGRS: '+where[3])
+            st.sidebar.write(where[0])
+            st.sidebar.write('Lat: '+str(where[1])+' Lon: '+str(where[2]))
+            st.sidebar.write('MGRS: '+where[3])
             alt = zf.elevation(where[1],where[2])
-            st.write('Alt :'+str(round(alt,2))+' Meters')
+            st.sidebar.write('Alt :'+str(round(alt,2))+' Meters')
     with c1:
         
         lpmgrs = st.text_input('Launch Point (MGRS):','12RWU1059022575')

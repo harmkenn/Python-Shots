@@ -140,9 +140,36 @@ def app():
             ElevM = ElasticNet()
             ElevM.fit(macs[['Range']],macs['Elev'])
             elev = ElevM.predict([[rng]])[0]
-            data = pd.DataFrame({'Range (Meters)':str(rng),'Shell':'M795','Charge':chrg,'Azimuth to Target (mils)':str(round(az,2)),
-                                 'Grid Declination (mils)':str(round(gdm,1)),'Drift':str(round(drift,1)),'Deflection (mils)':str(round(defl,1)),
-                                 'Muzzle Velocity (m/s)':str(mv),'Elevation (mils)':str(round(elev,1))},index = ['Fire Mission']).T 
+            vi = int(ipalt)-int(lpalt)
+            AOSm = np.arctan(vi/rng)*3200/np.pi
+            CSF = 0
+            if vi > 0:
+                CSFM = ElasticNet()
+                CSFM.fit(macs[['Range']],macs['csf.p'])
+                CSF = CSFM.predict([[rng]])[0]
+                CAS = AOSm*CSF
+            if vi < 0:
+                CSFM = ElasticNet()
+                CSFM.fit(macs[['Range']],macs['csf.n'])
+                CSF = CSFM.predict([[rng]])[0]
+                CAS = AOSm*CSF*(-1)
+            sitem = AOSm+CAS
+            QE = elev+sitem
+            tofM = ElasticNet()
+            tofM.fit(macs[['Range']],macs['TOF'])
+            TOF = tofM.predict([[rng]])[0]
+            moM = ElasticNet()
+            moM.fit(macs[['Elev']],macs['Maxord.z'])
+            MO = moM.predict([[QE]])[0]
+            crM = ElasticNet()
+            crM.fit(macs[['Elev']],macs['Range'])
+            CR = crM.predict([[QE]])[0]
+            data = pd.DataFrame({'Range (Meters)':str(int(rng)),'Corrected Range (Meters)':str(int(CR)),'Shell':'M795','Charge':chrg,
+                                 'Azimuth to Target (mils)':str(round(az,1)),
+                                 'Grid Declination (mils)':str(round(gdm,1)),'Drift (mils)':str(round(drift,1)),'Deflection (mils)':str(round(defl,1)),
+                                 'Muzzle Velocity (m/s)':str(mv),'Elevation (mils)':str(round(elev,1)),'AOS (mils)':str(round(AOSm,1)),
+                                 'CAS (mils)':str(round(CAS,1)),'Site (mils)':str(round(sitem,1)),'QE (mils)':str(round(QE,1)),
+                                 'Time of Flight (sec)':str(round(TOF,1)),'MaxOrd (Meters)':str(int(MO))},index = ['Fire Mission']).T 
             
             st.write(data) 
             

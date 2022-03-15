@@ -6,3 +6,6 @@ sklearn
 folium
 streamlit_folium
 pygeodesy
+sklearn
+scipy
+plotly.express

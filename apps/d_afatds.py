@@ -5,11 +5,13 @@ from streamlit_folium import folium_static
 from folium import plugins
 import numpy as np
 from sklearn.linear_model import ElasticNet
-
+from scipy.optimize import curve_fit
+import plotly.express as px
 from apps import z_functions as zf
 
 def app():
     # title of the app
+       
     st.markdown('AFATDS')
     c1,c2,c3 = st.columns((1,3,1.5))
     with c1:
@@ -130,7 +132,7 @@ def app():
             macs = pd.read_csv('data/MACs.csv',encoding = 'latin1')
             
             macs = macs[macs['Charge'].str.contains(chrg[-2:])]
-            st.write(macs)
+            #st.write(macs)
             DriftM = ElasticNet()
             DriftM.fit(macs[['Range']],macs['Drift'])
             drift = DriftM.predict([[rng]])[0]
@@ -170,8 +172,20 @@ def app():
                                  'Muzzle Velocity (m/s)':str(mv),'Elevation (mils)':str(round(elev,1)),'AOS (mils)':str(round(AOSm,1)),
                                  'CAS (mils)':str(round(CAS,1)),'Site (mils)':str(round(sitem,1)),'QE (mils)':str(round(QE,1)),
                                  'Time of Flight (sec)':str(round(TOF,1)),'MaxOrd (Meters)':str(int(MO))},index = ['Fire Mission']).T 
+            st.dataframe(data,height=500) 
+
+        with c2:
             
-            st.write(data) 
+            tPoints = pd.DataFrame({'Ranges':[0,.57*CR,.58*CR,rng],'Alts':[int(lpalt),MO,MO,int(ipalt)]})
+            x, y = tPoints['Ranges'], tPoints['Alts']
+            model5 = np.poly1d(np.polyfit(x, y, 5))
+            x_traj = np.arange(0, int(rng), 100)
+            y_traj = model5(x_traj)
+            fig = px.scatter(tPoints, x=x_traj, y=y_traj)
+            fig.update_layout(autosize=False,width=800,height=MO/rng*800*1.5)
+            st.plotly_chart(fig)
+            
+            
             
             
 

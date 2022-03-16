@@ -14,7 +14,7 @@ app.add_app("Deflection", a_deflection.app)
 app.add_app("Point to Point", b_points.app)
 app.add_app("Polar", c_polar.app)
 app.add_app("AFATDS", d_afatds.app)
-app.add_app("Physics", e_physics.app)
+app.add_app("Artillery Physics", e_physics.app)
 app.add_app("Sun to Grid", f_sungrid.app)
 app.add_app("Sun to North", g_sunnorth.app)
 

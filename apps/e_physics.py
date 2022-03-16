@@ -59,5 +59,7 @@ def app():
         fig.update_layout(autosize=False,width=800,height=MO/rng*800*2)
         st.plotly_chart(fig)
     with c1:    
-        data = pd.DataFrame({'Range (Meters)':str(br)},index = ['Fire Mission']).T 
+        data = pd.DataFrame({'Range (Meters)':str(int(br)),'Time of Flight (s)':str(round(bt,1)),
+                             'Angle of Fall':str(int(bthm)),'Final Velocity (m/s)':str(int(bv)),
+                             'Max Ord (Meters)':str(int(MO))},index = ['Results']).T 
         st.dataframe(data,height=500) 

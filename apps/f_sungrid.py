@@ -28,14 +28,29 @@ def app():
             setday = datetime.now(timezone.utc)
         st.write(str(setday)+'UTC')
         sslon = 180-(setday.hour+setday.minute/60+setday.second/3600)*15+22/60
-        st.write(sslon)
+        
         julian = int(setday.strftime('%j')) + (setday.hour+setday.minute/60+setday.second/3600)/24
         a = 360/365.24*(julian - 2)*np.pi/180
         b = (360/365.24*(julian+10)+360/np.pi*.0167*np.sin(a))*np.pi/180
         c = np.sin(-23.44*np.pi/180)*np.cos(b)
         sslat = np.arcsin(c)*180/np.pi - .07
-        st.write(julian)
-        st.write(sslat)
+        st.write('Sub Solar Point: '+str(sslat)+', '+str(sslon))
+
+        azsun = st.number_input('Azimuth to the Sun',0,360,180)
+        bazsun = azsun + 180
+        vasun = st.number_input('Vertical Angle to the Sun',0,90,45)
+        dist = (90-vasun)/360*2*6371*np.pi
+        sslatr = sslat*np.pi/180
+        sslonr = sslon*np.pi/180
+        bazsunr = bazsun*np.pi/180
+        delta = dist/6371
+
+        melatr = np.arcsin(np.sin(sslatr)*np.cos(delta)+np.cos(sslatr)*np.sin(delta)*np.cos(bazsunr))
+        melat = melatr*180/np.pi
+        melonr = sslonr + np.arctan2(np.sin(bazsunr)*np.sin(delta)*np.cos(sslatr),np.cos(delta)-np.sin(sslatr)*np.sin(melatr))
+        melon = melonr*180/np.pi
+        st.write('My Location: '+ str(melat) + ', ' + str(melon))
+        
         
         # map
         map = folium.Map(location=[sslat, sslon], zoom_start=1)
@@ -81,9 +96,10 @@ def app():
         plugins.Fullscreen(position='topright').add_to(map)
         
         # add marker to map https://fontawesome.com/v5.15/icons?d=gallery&p=2&m=free
-        sun = folium.features.CustomIcon('Icons/paladin.jpg',icon_size=(30,20))
+        sun = folium.features.CustomIcon('Icons/target.png',icon_size=(30,30))
         folium.Marker(location=[sslat, sslon], color='green', tooltip='SubSolar Point',icon=sun).add_to(map)
-        
+        pal = folium.features.CustomIcon('Icons/paladin.jpg',icon_size=(30,20))
+        folium.Marker(location=[melat, melon], color='green', tooltip='my location',icon=pal).add_to(map)
         draw = plugins.Draw()
         draw.add_to(map)
         # display map

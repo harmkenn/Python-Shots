@@ -2,6 +2,10 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timezone, timedelta
+import folium
+from streamlit_folium import folium_static
+from folium import plugins
+from apps import z_functions as zf
 def app():
     # title of the app
     st.markdown('Get your position from the location of the sun')
@@ -32,6 +36,58 @@ def app():
         sslat = np.arcsin(c)*180/np.pi - .07
         st.write(julian)
         st.write(sslat)
+        
+        # map
+        map = folium.Map(location=[sslat, sslon], zoom_start=1)
+        # add tiles to map
+        folium.raster_layers.TileLayer('Open Street Map').add_to(map)
+        folium.raster_layers.TileLayer('Stamen Terrain').add_to(map)
+        # Add custom base maps to folium
+        folium.raster_layers.TileLayer(
+                tiles = 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+                attr = 'Google',
+                name = 'Google Maps',
+                overlay = False,
+                control = True
+            ).add_to(map)
+        folium.raster_layers.TileLayer(
+                tiles = 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+                attr = 'Google',
+                name = 'Google Satellite',
+                overlay = False,
+                control = True
+            ).add_to(map)
+        folium.raster_layers.TileLayer(
+                iles = 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
+                attr = 'Google',
+                name = 'Google Terrain',
+                overlay = False,
+                control = True
+            ).add_to(map)
+
+        # add layer control to show different maps
+        folium.LayerControl().add_to(map)
+        
+        # plugin for mini map
+        minimap = plugins.MiniMap(toggle_display=True)
+
+        # add minimap to map
+        map.add_child(minimap)
+        
+        # add scroll zoom toggler to map
+        plugins.ScrollZoomToggler().add_to(map)
+
+        # add full screen button to map
+        plugins.Fullscreen(position='topright').add_to(map)
+        
+        # add marker to map https://fontawesome.com/v5.15/icons?d=gallery&p=2&m=free
+        sun = folium.features.CustomIcon('Icons/paladin.jpg',icon_size=(30,20))
+        folium.Marker(location=[sslat, sslon], color='green', tooltip='SubSolar Point',icon=sun).add_to(map)
+        
+        draw = plugins.Draw()
+        draw.add_to(map)
+        # display map
+        folium_static(map)
 
         
         

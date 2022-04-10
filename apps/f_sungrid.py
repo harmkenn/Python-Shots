@@ -49,11 +49,16 @@ def app():
         melat = melatr*180/np.pi
         melonr = sslonr + np.arctan2(np.sin(bazsunr)*np.sin(delta)*np.cos(sslatr),np.cos(delta)-np.sin(sslatr)*np.sin(melatr))
         melon = melonr*180/np.pi
-        st.write('My Location: '+ str(melat) + ', ' + str(melon))
+        fmelon = melon
+        if fmelon<-180:
+            fmelon = fmelon +360
+        if fmelon>180:
+            fmelon = fmelon -360
+        st.write('My Location: '+ str(melat) + ', ' + str(fmelon))
         
         
         # map
-        map = folium.Map(location=[sslat, sslon], zoom_start=1)
+        map = folium.Map(location=[0, 0], zoom_start=1)
         # add tiles to map
         folium.raster_layers.TileLayer('Open Street Map').add_to(map)
         folium.raster_layers.TileLayer('Stamen Terrain').add_to(map)
@@ -100,6 +105,7 @@ def app():
         folium.Marker(location=[sslat, sslon], color='green', tooltip='SubSolar Point',icon=sun).add_to(map)
         pal = folium.features.CustomIcon('Icons/paladin.jpg',icon_size=(30,20))
         folium.Marker(location=[melat, melon], color='green', tooltip='my location',icon=pal).add_to(map)
+        folium.PolyLine([[sslat, sslon],[melat,melon]],tooltip='Azimuth').add_to(map)
         draw = plugins.Draw()
         draw.add_to(map)
         # display map

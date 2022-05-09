@@ -36,9 +36,9 @@ def app():
         sslat = np.arcsin(c)*180/np.pi - .07
         st.write('Sub Solar Point: '+str(sslat)+', '+str(sslon))
 
-        azsun = st.number_input('Azimuth to the Sun',0,360,180)
+        azsun = st.number_input('Azimuth to the Sun',0.00,360.00,10.0)
         bazsun = azsun + 180
-        vasun = st.number_input('Vertical Angle to the Sun',0,90,45)
+        vasun = st.number_input('Vertical Angle to the Sun',0.00,90.00,45.00)
         dist = (90-vasun)/360*2*6371*np.pi
         sslatr = sslat*np.pi/180
         sslonr = sslon*np.pi/180

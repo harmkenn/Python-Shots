@@ -9,3 +9,4 @@ pygeodesy
 sklearn
 scipy
 plotly.express
+scikit-learn

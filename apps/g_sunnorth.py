@@ -37,26 +37,9 @@ def app():
         st.write('Sub Solar Point: '+str(sslat)+', '+str(sslon),', MGRS: '+ zf.LL2MGRS(sslat,sslon)[1])
         lpmgrs = st.text_input('Your Location (MGRS):',zf.LL2MGRS(sslat, sslon)[1])
 
-        azsun = st.number_input('Azimuth to the Sun',0.00,360.00,10.0)
-        bazsun = azsun + 180
-        vasun = st.number_input('Vertical Angle to the Sun',0.00,90.00,45.00)
-        dist = (90-vasun)/360*2*6371*np.pi
-        sslatr = sslat*np.pi/180
-        sslonr = sslon*np.pi/180
-        bazsunr = bazsun*np.pi/180
-        delta = dist/6371
-
-        melatr = np.arcsin(np.sin(sslatr)*np.cos(delta)+np.cos(sslatr)*np.sin(delta)*np.cos(bazsunr))
-        melat = melatr*180/np.pi
-        melonr = sslonr + np.arctan2(np.sin(bazsunr)*np.sin(delta)*np.cos(sslatr),np.cos(delta)-np.sin(sslatr)*np.sin(melatr))
-        melon = melonr*180/np.pi
-        fmelon = melon
-        if fmelon<-180:
-            fmelon = fmelon +360
-        if fmelon>180:
-            fmelon = fmelon -360
-        st.write('My Location: '+ str(melat) + ', ' + str(fmelon))
-        
+       
+       
+    
         
         # map
         map = folium.Map(location=[0, 0], zoom_start=1)

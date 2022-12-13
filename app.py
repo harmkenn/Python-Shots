@@ -16,7 +16,7 @@ app.add_app("Polar", c_polar.app)
 app.add_app("AFATDS", d_afatds.app)
 app.add_app("Artillery Physics", e_physics.app)
 app.add_app("Sun to Grid", f_sungrid.app)
-app.add_app("Sun to North", g_sunnorth.app)
+app.add_app("Direction to Sun", g_sunnorth.app)
 
 # The main app
 app.run()

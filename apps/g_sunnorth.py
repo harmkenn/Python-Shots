@@ -37,7 +37,7 @@ def app():
         st.write('Sub Solar Point: '+str(sslat)+', '+str(sslon),', MGRS: '+ zf.LL2MGRS(sslat,sslon)[1])
         lpmgrs = st.text_input('Your Location (MGRS):',zf.LL2MGRS(sslat, sslon)[1])
         melat = zf.MGRS2LL(lpmgrs)[1]
-        melon = zf.MGRS2LL(lpmgrs)[2]+12
+        melon = zf.MGRS2LL(lpmgrs)[2]
         
        
        

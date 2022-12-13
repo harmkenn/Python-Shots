@@ -54,7 +54,7 @@ def app():
             fmelon = fmelon +360
         if fmelon>180:
             fmelon = fmelon -360
-        st.write('My Location: '+ str(melat) + ', ' + str(fmelon)S: 'MGRS: ' + zf.LL2MGRS(melat,melon)[1])
+        st.write('My Location: '+ str(melat) + ', ' + str(melon)+ 'MGRS: ' + zf.LL2MGRS(melat,melon)[1])
         
         
         # map

@@ -36,7 +36,8 @@ def app():
         sslat = np.arcsin(c)*180/np.pi - .07
         st.write('Sub Solar Point: '+str(sslat)+', '+str(sslon),', MGRS: '+ zf.LL2MGRS(sslat,sslon)[1])
         lpmgrs = st.text_input('Your Location (MGRS):',zf.LL2MGRS(sslat, sslon)[1])
-
+        melat = zf.MGRS2LL(lpmgrs)[0]
+        st.write(melat)
        
        
     

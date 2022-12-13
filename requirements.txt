@@ -9,4 +9,4 @@ pygeodesy
 sklearn
 scipy
 plotly.express
-scikit-learn
+# pip3 install -U scikit-learn scipy matplotli

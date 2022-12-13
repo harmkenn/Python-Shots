@@ -1,3 +1,4 @@
+# https://www.omnicalculator.com/physics/sun-angle
 import streamlit as st
 import pandas as pd
 import numpy as np

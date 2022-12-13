@@ -35,6 +35,7 @@ def app():
         c = np.sin(-23.44*np.pi/180)*np.cos(b)
         sslat = np.arcsin(c)*180/np.pi - .07
         st.write('Sub Solar Point: '+str(sslat)+', '+str(sslon),', MGRS: '+ zf.LL2MGRS(sslat,sslon)[1])
+        lpmgrs = st.text_input('Your Location (MGRS):',zf.LL2MGRS(sslat, sslon)[1])
 
         azsun = st.number_input('Azimuth to the Sun',0.00,360.00,10.0)
         bazsun = azsun + 180

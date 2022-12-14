@@ -43,6 +43,7 @@ def app():
         when = (setday.year,setday.month,setday.day,setday.hour,setday.minute,setday.second,0)
         location = (melat,melon)
         st.write(zf.sunpos(when, location, True))
+        st.write('azimuth to the sun: '+ zf.sunpos(when, location, True)[0])
        
     
         

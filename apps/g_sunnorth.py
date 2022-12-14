@@ -40,7 +40,9 @@ def app():
         melat = zf.MGRS2LL(lpmgrs)[1]
         melon = zf.MGRS2LL(lpmgrs)[2]
         
-       
+        when = (setday.year,setday.month,setday.day,setday.hour,setday.minute,setday.second,0)
+        location = (melat,melon)
+        st.write(zf.sunpos(when, location, True))
        
     
         

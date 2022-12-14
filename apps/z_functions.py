@@ -279,6 +279,15 @@ def into_range(x, range_min, range_max):
     delta = range_max - range_min
     return (((shiftedx % delta) + delta) % delta) + range_min
 
+import math
+
+pi = math.pi
+atan2 = math.atan2
+cos = math.cos
+sin = math.sin
+asin = math.asin
+degrees = math.degrees
+
 def subsolar(utc):
     ye, mo, da, ho, mi, se = utc
     ta = pi * 2

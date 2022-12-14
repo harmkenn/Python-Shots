@@ -28,16 +28,12 @@ def app():
         if st.button('Now'):
             setday = datetime.now(timezone.utc)
         st.write(str(setday)+'UTC')
-        sslon = 180-(setday.hour+setday.minute/60+setday.second/3600)*15+22/60
         
-        julian = int(setday.strftime('%j')) + (setday.hour+setday.minute/60+setday.second/3600)/24
-        a = 360/365.24*(julian - 2)*np.pi/180
-        b = (360/365.24*(julian+10)+360/np.pi*.0167*np.sin(a))*np.pi/180
-        c = np.sin(-23.44*np.pi/180)*np.cos(b)
-        sslat = np.arcsin(c)*180/np.pi - .07
-        st.write('Sub Solar Point: '+str(sslat)+', '+str(sslon),', MGRS: '+ zf.LL2MGRS(sslat,sslon)[1])
+        
         ssloc = zf.subsolar([setday.year,setday.month,setday.day,setday.hour,setday.minute,setday.second])
-        st.write('Sub Solar Point: '+str(ssloc)+' MGRS: '+str(zf.LL2MGRS(ssloc)))
+        sslat = ssloc[0]
+        sslon = ssloc[1]
+        st.write('Sub Solar Point: '+str(ssloc)+' MGRS: '+zf.LL2MGRS(sslat,sslon)[1])
         lpmgrs = st.text_input('Your Location (MGRS):','52WDU2497198959')
         melat = zf.MGRS2LL(lpmgrs)[1]
         melon = zf.MGRS2LL(lpmgrs)[2]

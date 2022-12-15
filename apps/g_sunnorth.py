@@ -40,7 +40,7 @@ def app():
         
         when = (setday.year,setday.month,setday.day,setday.hour,setday.minute,setday.second,0)
         location = (melat,melon)
-        st.write(location)
+        st.write(str(location))
         st.write('azimuth to the sun: '+ str(zf.sunpos(when, location, True)[0]))
         st.write('elevation to the sun: '+ str(zf.sunpos(when, location, True)[1]))
        

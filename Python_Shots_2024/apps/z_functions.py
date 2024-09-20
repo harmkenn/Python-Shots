@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from sklearn.ensemble import GradientBoostingRegressor
 
 
-nd = pd.read_csv('../data/northdes.csv')
+nd = pd.read_csv('northdes.csv')
 
 def getIndexes(dfObj, value):
     ''' Get index positions of value in dataframe i.e. dfObj.'''

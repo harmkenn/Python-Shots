@@ -103,9 +103,9 @@ def app():
         plugins.Fullscreen(position='topright').add_to(map)
         
         # add marker to map https://fontawesome.com/v5.15/icons?d=gallery&p=2&m=free
-        sun = folium.features.CustomIcon('Icons/target.png',icon_size=(30,30))
+        sun = folium.features.CustomIcon('Python_Shots_2024/Icons/target.png',icon_size=(30,30))
         folium.Marker(location=[sslat, sslon], color='green', tooltip='SubSolar Point',icon=sun).add_to(map)
-        pal = folium.features.CustomIcon('Icons/paladin.jpg',icon_size=(30,20))
+        pal = folium.features.CustomIcon('Python_Shots_2024/Icons/paladin.jpg',icon_size=(30,20))
         folium.Marker(location=[melat, melon], color='green', tooltip='my location',icon=pal).add_to(map)
 
         points = []

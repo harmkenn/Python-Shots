@@ -496,7 +496,7 @@ def projectile_motion_with_drag(v0, angle, mass, drag_coefficient, area, latitud
 
 # ML QE to Range computation
 
-mlQE2Range = pd.read_csv('data/2024ArtilleryData.csv')
+mlQE2Range = pd.read_csv('Python_Shots_2024/data/2024ArtilleryData.csv')
 # Split data into features (X) and target (y)
 X = mlQE2Range.iloc[:,:8]
 r = mlQE2Range['range']
@@ -537,7 +537,7 @@ def MLshot(l_lat,l_alt,i_alt,mass,GTAz,AOL,QE,v0):
 
 # ML Range to QE computation
 
-mlRange2QE = pd.read_csv('data/2024AFATDSData.csv')
+mlRange2QE = pd.read_csv('Python_Shots_2024/data/2024AFATDSData.csv')
 mlRange2QE_H = mlRange2QE[mlRange2QE['QE']>800]
 mlRange2QE_L = mlRange2QE[mlRange2QE['QE']<800]
 # Split data into features (X) and target (y)

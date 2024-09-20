@@ -58,7 +58,7 @@ def app():
                 
                 if st.button("Process"):
                     # Create a new dataframe with selected columns
-                    add_df = df[[selected_name_column, selected_description_column, selected_type_column, selected_lat_column, selected_lon_column]]
+                    add_df = df[[name, desc, type, lat, lon]]
                     go = 1
                     # Display the resulting dataframe
                     st.write(add_df)

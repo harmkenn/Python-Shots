@@ -50,11 +50,11 @@ def app():
                 df = pd.read_excel(uploaded_file, sheet_name=selected_sheet)
         
                 # Create dropdown boxes for selecting columns
-                selected_name_column = st.selectbox("Select Name column:", df.columns)
-                selected_description_column = st.selectbox("Select Description column:", df.columns)
-                selected_type_column = st.selectbox("Select Type column:", df.columns)
-                selected_lat_column = st.selectbox("Latitude:", df.columns)
-                selected_lon_column = st.selectbox("Longitude:", df.columns)
+                name = st.selectbox("Select Name column:", df.columns)
+                desc = st.selectbox("Select Description column:", df.columns)
+                type = st.selectbox("Select Type column:", df.columns)
+                lat = st.selectbox("Latitude:", df.columns)
+                lon = st.selectbox("Longitude:", df.columns)
                 
                 if st.button("Process"):
                     # Create a new dataframe with selected columns
@@ -66,7 +66,7 @@ def app():
         else:
             st.write("Upload an Excel file above.")
             
-        
+        add_df['dist'] = add_df.apply(lambda row: zf.LLDist(ip[1],ip[2],row[lat], row[lon])[0], axis=1)
 
     with c2:
         # map
@@ -121,7 +121,7 @@ def app():
         folium.Marker(location=[ip[1],ip[2]], color='green',popup=ipmgrs, tooltip='Impact Point',icon=tgt).add_to(map)
         add_df = add_df.dropna()
         for index, row in add_df.iterrows():
-            folium.CircleMarker(location=[row['lat'], row['long']],tooltip=row['Facility Name'] ,radius=3, color='blue', fill=True, fill_color='blue').add_to(map)
+            folium.CircleMarker(location=[row[lat], row[lon]],tooltip=row[name] ,radius=3, color='blue', fill=True, fill_color='blue').add_to(map)
     
     
         

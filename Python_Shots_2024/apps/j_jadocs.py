@@ -114,9 +114,9 @@ def app():
         plugins.Fullscreen(position='topright').add_to(map)
         
         # add marker to map https://fontawesome.com/v5.15/icons?d=gallery&p=2&m=free
-        pal = folium.features.CustomIcon('Icons/paladin.jpg',icon_size=(30,20))
-        tgt = folium.features.CustomIcon('Icons/target.png',icon_size=(25,25))
-        safe = folium.features.CustomIcon('Icons/safe.png',icon_size=(25,25))
+        pal = folium.features.CustomIcon('Python_Shots_2024/Icons/paladin.jpg',icon_size=(30,20))
+        tgt = folium.features.CustomIcon('Python_Shots_2024/Icons/target.png',icon_size=(25,25))
+        safe = folium.features.CustomIcon('Python_Shots_2024/Icons/safe.png',icon_size=(25,25))
 
         folium.Marker(location=[ip[1],ip[2]], color='green',popup=ipmgrs, tooltip='Impact Point',icon=tgt).add_to(map)
         add_df = add_df.dropna()

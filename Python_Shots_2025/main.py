@@ -8,15 +8,17 @@ st.set_page_config(layout="wide", page_title=f"Python Shots 2025")
 # Dictionary that maps .py filenames to user-friendly names
 sub_app_names = {
     'a_deflection.py': 'Deflection',
-    'b_points.py': 'Point to Point'
+    'b_points.py': 'Point to Point',
+    'c_polar.py': 'Polar'
 }
 
 # Get a list of .py files from the SubApps folder
-sub_apps_folder = 'SubApps'
+sub_apps_folder = os.path.join(os.path.dirname(__file__), 'SubApps')
 sub_apps = [f for f in os.listdir(sub_apps_folder) if f.endswith('.py')]
-
+st.sidebar.title("Python Shots v2025.1")
+st.sidebar.subheader("by Ken Harmon")
 # Create radio buttons in the sidebar using the user-friendly names
-selected_sub_app_name = st.sidebar.radio('Select a sub-app', list(sub_app_names.values()))
+selected_sub_app_name = st.sidebar.radio('', list(sub_app_names.values()))
 
 # Get the corresponding .py filename from the selected name
 selected_sub_app = [k for k, v in sub_app_names.items() if v == selected_sub_app_name][0]

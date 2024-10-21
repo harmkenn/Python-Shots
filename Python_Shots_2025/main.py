@@ -10,7 +10,7 @@ sub_app_names = {
     'a_deflection.py': 'Deflection',
     'b_points.py': 'Point to Point',
     'c_polar.py': 'Polar',
-    'd_afatds.py': 'AFATDS'
+    'd_afatds.py': 'AFATDS',
     'e_physics.py': 'Physics'
 }
 

@@ -11,7 +11,13 @@ sub_app_names = {
     'b_points.py': 'Point to Point',
     'c_polar.py': 'Polar',
     'd_afatds.py': 'AFATDS',
-    'e_physics.py': 'Physics'
+    'e_physics.py': 'Physics',
+    'f_sungrid.py': 'Sun to Grid',
+    'g_sunnorth.py': 'Grid to Sun',
+    'h_celgrid.py': 'Celestial to Grid',
+    'i_grid_cel.py': 'Grid to Celestial',
+    'j_jadocs.py': 'JADOCS',
+    'k_rockets.py': 'Rockets'
 }
 
 # Get a list of .py files from the SubApps folder

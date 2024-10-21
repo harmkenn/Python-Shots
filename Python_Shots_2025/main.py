@@ -9,7 +9,8 @@ st.set_page_config(layout="wide", page_title=f"Python Shots 2025")
 sub_app_names = {
     'a_deflection.py': 'Deflection',
     'b_points.py': 'Point to Point',
-    'c_polar.py': 'Polar'
+    'c_polar.py': 'Polar',
+    'd_afatds.py': 'AFATDS'
 }
 
 # Get a list of .py files from the SubApps folder

@@ -11,6 +11,7 @@ sub_app_names = {
     'b_points.py': 'Point to Point',
     'c_polar.py': 'Polar',
     'd_afatds.py': 'AFATDS'
+    'e_physics.py': 'Physics'
 }
 
 # Get a list of .py files from the SubApps folder

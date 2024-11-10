@@ -28,7 +28,7 @@ with c1:
     if 'na_ipmgrs' not in st.session_state: st.session_state['na_ipmgrs'] = '36SYC6482066356'
     na_ipmgrs = st.session_state['na_ipmgrs']
     # Create a text input field
-    user_input = st.text_area("Paste Point", height=24)
+    user_input = st.text_area("Paste Point", height=68)
     # Create the button
     rad = st.radio('lat lon to MGRS',['to Launch Point','to Impact Point'])
     if st.button("convert"):

@@ -37,7 +37,7 @@ with c1:
     st.write('(LL): '+str(round(ip[1],3))+', '+str(round(ip[2],5)))
 
     # File uploader to allow users to upload an Excel file
-    uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx", "xls"])
+    uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx", "xls", "csv"])
     # If file is uploaded
     if uploaded_file is not None:
         

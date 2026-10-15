@@ -18,6 +18,7 @@ geopy
 pyproj
 matplotlib
 openpyxl
+gunicorn
 
 # pip3 install -U scikit-learn scipy matplotli
 # pip install -r requirements.txt

@@ -6,7 +6,7 @@ import dash_bootstrap_components as dbc
 app = Dash(
     __name__,
     use_pages=True,
-    pages_folder="pages",  # Replaces 'SubApps' folder
+    pages_folder="SubApps",  # Replaces 'SubApps' folder
     external_stylesheets=[dbc.themes.BOOTSTRAP]
 )
 
@@ -33,7 +33,7 @@ sidebar = html.Div(
         html.H3("Python Shots v2025.1", className="display-8"),
         html.H6("by Ken Harmon", className="text-muted mb-4"),
         html.Hr(),
-        # Generate navigation links dynamically from registered pages
+        # Generate navigation links dynamically from registered 
         dbc.Nav(
             [
                 dbc.NavLink(

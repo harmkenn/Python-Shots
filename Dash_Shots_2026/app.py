@@ -30,7 +30,7 @@ CONTENT_STYLE = {
 # Sidebar Layout
 sidebar = html.Div(
     [
-        html.H3("Python Shots v2025.1", className="display-8"),
+        html.H3("Python Dash Shots v2026.2", className="display-8"),
         html.H6("by Ken Harmon", className="text-muted mb-4"),
         html.Hr(),
         # Generate navigation links dynamically from registered 
@@ -52,10 +52,10 @@ sidebar = html.Div(
 )
 
 # Content area where sub-app views render dynamically
-content = html.Div(dcc.page_container, style=CONTENT_STYLE)
+content = html.Div(dash.page_container, style=CONTENT_STYLE)
 
 # Master Layout
 app.layout = html.Div([sidebar, content])
 
 if __name__ == "__main__":
-    app.run_server(debug=True)
+    app.run(debug=True)

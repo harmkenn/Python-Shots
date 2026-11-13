@@ -19,6 +19,9 @@ pyproj
 matplotlib
 openpyxl
 gunicorn
+dash
+dash_bootstrap_components
+
 
 # pip3 install -U scikit-learn scipy matplotli
 # pip install -r requirements.txt

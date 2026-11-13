@@ -1,3 +1,4 @@
+import os
 import dash
 from dash import html, dcc, Input, Output, State, callback
 import dash_bootstrap_components as dbc
@@ -53,7 +54,12 @@ layout = dbc.Container(
                                         html.Div(id="def-ll-converted-output", className="mb-3 text-muted"),
                                         html.Hr(),
                                         dbc.Label("Lookup Identifier"),
-                                        dbc.Input(id="def-lookup", type="text", placeholder="Type at least 3 chars..."),
+                                        dbc.InputGroup(
+                                            [
+                                                dbc.Input(id="def-lookup", type="text", placeholder="Enter a place or address..."),
+                                                dbc.Button("Search", id="def-lookup-button", n_clicks=0),
+                                            ]
+                                        ),
                                         html.Div(id="def-lookup-output", className="mt-2 text-info"),
                                     ]
                                 ),
@@ -69,10 +75,11 @@ layout = dbc.Container(
                                         dbc.Label("Azimuth of Fire (mils):"),
                                         dbc.Input(id="def-aof", type="number", value=2000, className="mb-2"),
                                         
-                                        dbc.Label("Launch Point (MGRS):"),
+                                        dbc.Label("Start Point (MGRS):"),
                                         dbc.Input(id="def-lpmgrs", type="text", value="", className="mb-2"),
+                                        html.Div(id="def-start-ll-output", className="text-muted mb-3"),
                                         
-                                        dbc.Label("Impact Point (MGRS):"),
+                                        dbc.Label("End Point (MGRS):"),
                                         dbc.Input(id="def-ipmgrs", type="text", value="", className="mb-3"),
                                         
                                         html.Div(id="def-tp-output", className="text-muted"),
@@ -148,13 +155,28 @@ def update_initial_mgrs(lat, lon):
         return f"Conversion error: {e}", "", ""
 
 
+@callback(
+    Output("def-start-ll-output", "children"),
+    Input("def-lpmgrs", "value"),
+)
+def display_start_point_coordinates(lpmgrs):
+    if not lpmgrs:
+        return ""
+    try:
+        start = zf.MGRS2LL(lpmgrs)
+        return f"Start Point (LL): {round(start[1], 5)}, {round(start[2], 5)}"
+    except Exception as e:
+        return f"Invalid MGRS: {e}"
+
+
 # Callback 2: Optional Lookup functionality
 @callback(
     Output("def-lookup-output", "children"),
-    Input("def-lookup", "value"),
+    Input("def-lookup-button", "n_clicks"),
+    State("def-lookup", "value"),
 )
-def process_lookup(lu):
-    if not lu or len(lu) < 3:
+def process_lookup(n_clicks, lu):
+    if not n_clicks or not lu or not lu.strip():
         return ""
     try:
         where = zf.lookup(lu)
@@ -167,8 +189,8 @@ def process_lookup(lu):
                 html.P(f"Alt: {round(alt, 2)} Meters", className="mb-0"),
             ]
         )
-    except Exception:
-        return "Lookup item not found."
+    except Exception as e:
+        return f"Lookup error: {e}"
 
 
 # Callback 3: Update Map & Fire Control Metrics
@@ -193,7 +215,7 @@ def update_map_and_metrics(aof, lpmgrs, ipmgrs):
         tp_info = html.Div(
             [
                 html.P(f"UTM: {ip[0]}", className="mb-1"),
-                html.P(f"Impact Point (LL): {round(ip[1], 5)}, {round(ip[2], 5)}", className="mb-0"),
+                html.P(f"End Point (LL): {round(ip[1], 5)}, {round(ip[2], 5)}", className="mb-0"),
             ]
         )
 
@@ -226,16 +248,46 @@ def update_map_and_metrics(aof, lpmgrs, ipmgrs):
         plugins.ScrollZoomToggler().add_to(fmap)
         plugins.Fullscreen(position='topright').add_to(fmap)
 
-        # Icons & Markers
-        try:
-            pal = folium.features.CustomIcon('Python_Shots_2024/Icons/paladin.jpg', icon_size=(30, 20))
-            tgt = folium.features.CustomIcon('Python_Shots_2024/Icons/target.png', icon_size=(25, 25))
-            folium.Marker(location=[lp[1], lp[2]], popup=lpmgrs, tooltip='Launch Point', icon=pal).add_to(fmap)
-            folium.Marker(location=[ip[1], ip[2]], popup=ipmgrs, tooltip='Impact Point', icon=tgt).add_to(fmap)
-        except Exception:
-            # Fallback standard markers if icons are missing
-            folium.Marker(location=[lp[1], lp[2]], popup=lpmgrs, tooltip='Launch Point', icon=folium.Icon(color='green')).add_to(fmap)
-            folium.Marker(location=[ip[1], ip[2]], popup=ipmgrs, tooltip='Impact Point', icon=folium.Icon(color='red')).add_to(fmap)
+        # Resolve icons relative to this app, so launching Dash from another
+        # working directory does not break the marker images.
+        app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        icons_dir = os.path.join(app_dir, 'Icons')
+        pal_path = os.path.join(icons_dir, 'paladin.jpg')
+        tgt_path = os.path.join(icons_dir, 'target.png')
+
+        # Icons & Markers for Start Point (lp) and End Point (ip)
+        if os.path.exists(pal_path) and os.path.exists(tgt_path):
+            pal = folium.features.CustomIcon(pal_path, icon_size=(30, 20))
+            tgt = folium.features.CustomIcon(tgt_path, icon_size=(25, 25))
+            
+            folium.Marker(
+                location=[lp[1], lp[2]], 
+                popup=lpmgrs, 
+                tooltip='Start Point', 
+                icon=pal
+            ).add_to(fmap)
+            
+            folium.Marker(
+                location=[ip[1], ip[2]], 
+                popup=ipmgrs, 
+                tooltip='End Point', 
+                icon=tgt
+            ).add_to(fmap)
+        else:
+            print(f"Icon files not found at:\n - {pal_path}\n - {tgt_path}")
+            folium.Marker(
+                location=[lp[1], lp[2]], 
+                popup=lpmgrs, 
+                tooltip='Start Point', 
+                icon=folium.Icon(color='green')
+            ).add_to(fmap)
+            
+            folium.Marker(
+                location=[ip[1], ip[2]], 
+                popup=ipmgrs, 
+                tooltip='End Point', 
+                icon=folium.Icon(color='red')
+            ).add_to(fmap)
 
         # Polylines & Range Rings
         pback = zf.vPolar(lp[1], lp[2], aof * 180 / 3200, 30000)

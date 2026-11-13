@@ -35,4 +35,4 @@ yfinance
 
 # pip3 install -U scikit-learn scipy matplotli
 # pip install -r requirements.txt
-
+# https://console.cloud.google.com/apis/credentials/key/47c769e1-c7c9-4156-a76a-53093c385089?project=my-project-1571085387643

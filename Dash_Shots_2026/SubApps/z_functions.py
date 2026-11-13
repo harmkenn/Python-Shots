@@ -1,11 +1,19 @@
 """
 z_functions.py - Tactical & Geodetic Helper Module for Dash Apps
 Contains core mathematical transformations, MGRS/UTM conversions,
-geodesic calculations, and placeholder integrations for elevation & lookups.
+geodesic calculations, Google place lookup, and placeholder elevation data.
 """
 
+import json
 import math
+import os
+import re
 from typing import Tuple, List, Union, Dict, Any
+from urllib.parse import urlencode
+from urllib.request import urlopen
+
+from pygeodesy.ellipsoidalKarney import LatLon
+from pygeodesy.mgrs import parseMGRS
 
 
 # =====================================================================
@@ -136,94 +144,23 @@ def MGRS2LL(mgrs_str: str) -> Tuple[str, float, float]:
     Converts an MGRS string into (UTM formatted string, Latitude, Longitude).
     Supports 10-digit, 8-digit, 6-digit, and 4-digit MGRS strings.
     """
-    clean_mgrs = mgrs_str.replace(" ", "").upper()
-    if len(clean_mgrs) < 5:
-        raise ValueError("Invalid MGRS string length.")
+    clean_mgrs = "".join(mgrs_str.split()).upper()
+    if not re.fullmatch(
+        r"(?:0?[1-9]|[1-5]\d|60)[C-HJ-NP-X][A-HJ-NP-Z][A-HJ-NP-V](?:\d{2}){0,5}",
+        clean_mgrs,
+    ):
+        raise ValueError("Invalid MGRS string.")
+    if len(clean_mgrs) == 5:
+        clean_mgrs += "0000000000"
 
-    # 1. Parse GZD Zone & Band
-    gzd_len = 3 if clean_mgrs[:2].isdigit() and clean_mgrs[2].isalpha() else 2
-    zone_num = int(clean_mgrs[:gzd_len - 1])
-    lat_band = clean_mgrs[gzd_len - 1]
-
-    # 2. Parse 100km Square Identification
-    sq_col = clean_mgrs[gzd_len]
-    sq_row = clean_mgrs[gzd_len + 1]
-
-    # 3. Parse Numerical Offsets
-    num_part = clean_mgrs[gzd_len + 2:]
-    half_len = len(num_part) // 2
-    
-    e_str = num_part[:half_len].ljust(5, '0')
-    n_str = num_part[half_len:].ljust(5, '0')
-
-    e_offset = int(e_str)
-    n_offset = int(n_str)
-
-    # 4. Reconstruct Approximate Full Easting
-    col_set = (zone_num - 1) % 3
-    col_letters = ["ABCDEFGH", "JKLMNPQR", "STUVWXYZ"][col_set]
-    col_idx = col_letters.index(sq_col) + 1
-    easting = (col_idx * 100000) + e_offset
-
-    # 5. Reconstruct Approximate Full Northing
-    row_letters_odd = "ABCDEFGHJKLMNPQRSTUV"
-    row_letters_even = "FGHJKLMNPQRSTUVABCDE"
-    row_letters = row_letters_even if (zone_num % 2 == 0) else row_letters_odd
-    row_idx = row_letters.index(sq_row)
-
-    # Approximate Latitude based on Band Letter
-    band_letters = "CDEFGHJKLMNPQRSTUVWX"
-    approx_lat = (band_letters.index(lat_band) * 8) - 80 + 4
-    
-    # Calculate approximate central northing block
-    approx_northing = 0.0 if approx_lat >= 0 else 10000000.0
-    if approx_lat >= 0:
-        approx_northing += approx_lat * 111000.0
-
-    northing_block = math.floor(approx_northing / 2000000.0) * 2000000.0
-    northing = northing_block + (row_idx * 100000) + n_offset
-
-    # Reverse UTM to Lat/Lon Inverse Transformation
-    a = 6378137.0
-    f = 1 / 298.257223563
-    e2 = f * (2 - f)
-    e_prime2 = e2 / (1 - e2)
-    k0 = 0.9996
-
-    x = easting - 500000.0
-    y = northing
-    if approx_lat < 0 and y < 10000000.0:
-        y -= 10000000.0  # Adjust Southern Hemisphere offset if needed
-
-    M = y / k0
-    mu = M / (a * (1 - e2/4 - 3*e2**2/64 - 5*e2**3/256))
-
-    e1 = (1 - math.sqrt(1 - e2)) / (1 + math.sqrt(1 - e2))
-    phi1 = mu + (3*e1/2 - 27*e1**3/32)*math.sin(2*mu) + (21*e1**2/16 - 55*e1**4/32)*math.sin(4*mu)
-
-    sin_phi1 = math.sin(phi1)
-    cos_phi1 = math.cos(phi1)
-    tan_phi1 = math.tan(phi1)
-
-    N1 = a / math.sqrt(1 - e2 * sin_phi1**2)
-    R1 = a * (1 - e2) / ((1 - e2 * sin_phi1**2)**1.5)
-    T1 = tan_phi1**2
-    C1 = e_prime2 * cos_phi1**2
-    D = x / (N1 * k0)
-
-    lat = phi1 - (N1 * tan_phi1 / R1) * (
-        D**2/2 - (5 + 3*T1 + 10*C1 - 4*C1**2 - 9*e_prime2)*(D**4)/24
-        + (61 + 90*T1 + 298*C1 + 45*T1**2 - 252*e_prime2)*(D**6)/720
+    mgrs = parseMGRS(clean_mgrs)
+    point = mgrs.toLatLon(LatLon=LatLon, center=False)
+    utm = mgrs.toUtm(center=False)
+    utm_formatted = (
+        f"{mgrs.zone:02d}{mgrs.band} "
+        f"{int(utm.easting):06d}mE {int(utm.northing):07d}mN"
     )
-    
-    central_meridian = math.radians((zone_num - 1) * 6 - 180 + 3)
-    lon = central_meridian + (
-        D - (1 + 2*T1 + C1)*(D**3)/6
-        + (5 - 2*C1 + 28*T1 - 3*C1**2 + 8*e_prime2 + 24*T1**2)*(D**5)/120
-    ) / cos_phi1
-
-    utm_formatted = f"{zone_num:02d}{lat_band} {int(easting):06d}mE {int(northing):07d}mN"
-    return utm_formatted, math.degrees(lat), math.degrees(lon)
+    return utm_formatted, point.lat, point.lon
 
 
 # =====================================================================
@@ -286,31 +223,52 @@ def vPolar(lat: float, lon: float, bearing_deg: float, dist_m: float) -> Tuple[f
 
 
 # =====================================================================
-# 3. Placeholders for Database / Remote API Lookups
+# 3. Google Geocoding Lookup
 # =====================================================================
 
 def lookup(query_str: str) -> List[Any]:
     """
-    Search lookup function for named points/targets.
-    Replace with actual database lookup as needed.
-    
+    Find a place using the Google Geocoding API.
+
     :return: [Name, Latitude, Longitude, MGRS_String]
     """
-    query_clean = query_str.strip().upper()
+    query = query_str.strip()
+    if not query:
+        raise ValueError("Enter a place or address to search.")
 
-    # Pre-populated mock data store
-    mock_db = {
-        "ALPHA": ["Point Alpha", -30.0, 30.0, "36JUU0000000000"],
-        "BRAVO": ["Point Bravo", -29.9, 30.1, "36JUU1012301234"],
-        "CHARLIE": ["Point Charlie", -30.1, 29.9, "36JTT8987689876"],
-    }
+    api_key = os.getenv("GOOGLE_MAPS_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "Set the GOOGLE_MAPS_API_KEY or GOOGLE_API_KEY environment variable."
+        )
 
-    if query_clean in mock_db:
-        return mock_db[query_clean]
+    params = urlencode({"address": query, "key": api_key})
+    url = f"https://maps.googleapis.com/maps/api/geocode/json?{params}"
+    with urlopen(url, timeout=10) as response:
+        payload = json.load(response)
 
-    # Dynamic fallback based on input
-    utm, mgrs = LL2MGRS(-30.0, 30.0)
-    return [f"Target {query_str}", -30.0, 30.0, mgrs]
+    status = payload.get("status")
+    if status != "OK":
+        detail = payload.get("error_message")
+        message = f"Google Geocoding API returned {status or 'an invalid response'}"
+        if detail:
+            message += f": {detail}"
+        raise ValueError(message)
+
+    results = payload.get("results") or []
+    if not results:
+        raise ValueError("Google returned no matching locations.")
+
+    result = results[0]
+    location = result["geometry"]["location"]
+    lat = float(location["lat"])
+    lon = float(location["lng"])
+    if not -90 <= lat <= 90 or not -180 <= lon <= 180:
+        raise ValueError("Google returned coordinates outside valid latitude/longitude ranges.")
+
+    address = result.get("formatted_address", query)
+    mgrs = LL2MGRS(lat, lon)[1]
+    return [address, lat, lon, mgrs]
 
 
 def elevation(lat: float, lon: float) -> float:

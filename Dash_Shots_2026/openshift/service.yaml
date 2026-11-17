@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: python-dash-shots
+  labels:
+    app: python-dash-shots
+spec:
+  selector:
+    app: python-dash-shots
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

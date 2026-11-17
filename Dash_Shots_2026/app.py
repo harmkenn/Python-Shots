@@ -1,3 +1,4 @@
+import os
 import dash
 from dash import Dash, html, dcc
 import dash_bootstrap_components as dbc
@@ -58,4 +59,8 @@ content = html.Div(dash.page_container, style=CONTENT_STYLE)
 app.layout = html.Div([sidebar, content])
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", "8080")),
+        debug=False,
+    )

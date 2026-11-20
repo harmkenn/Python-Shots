@@ -1,16 +1,14 @@
 """AFATDS ballistic planning page for the Dash Shots app."""
 
 import math
-import os
+import json
 import re
 
 import dash
 from dash import Input, Output, State, callback, dcc, html
 import dash_bootstrap_components as dbc
-import folium
 import plotly.express as px
 import plotly.graph_objects as go
-from folium import plugins
 
 from SubApps import z_functions as zf
 
@@ -299,42 +297,102 @@ def suggest_initial_velocity(launch_mgrs, impact_mgrs, mass):
         return None
 
 
-def _make_map(launch, impact, azimuth_of_lay):
+def _sample_map_line(start, bearing, distance, end=None, segments=80):
+    """Return geodesic samples as GeoJSON [longitude, latitude] coordinates."""
+    points = []
+    for index in range(segments + 1):
+        latitude, longitude = zf.vPolar(
+            float(start[1]), float(start[2]), bearing, distance * index / segments
+        )
+        points.append([float(longitude), float(latitude)])
+    if end is not None:
+        points[-1] = [float(end[2]), float(end[1])]
+    return points
+
+
+def _make_map(launch, impact, azimuth_of_lay, range_m, bearing_deg):
     launch_lat, launch_lon = float(launch[1]), float(launch[2])
     impact_lat, impact_lon = float(impact[1]), float(impact[2])
-    lon_delta = ((impact_lon - launch_lon + 180) % 360) - 180
-    center_lon = ((launch_lon + lon_delta / 2 + 180) % 360) - 180
-    distance, _ = zf.LLDist(launch_lat, launch_lon, impact_lat, impact_lon)
-    zoom = max(2, min(15, int(-1.36 * math.log(max(distance, 1) / 1000) + 15)))
-    fmap = folium.Map(location=[(launch_lat + impact_lat) / 2, center_lon], zoom_start=zoom)
-    folium.TileLayer("OpenStreetMap", name="Open Street Map").add_to(fmap)
-    for layer, name in (("m", "Google Maps"), ("s", "Google Satellite"), ("p", "Google Terrain")):
-        folium.TileLayer(
-            tiles=f"https://mt1.google.com/vt/lyrs={layer}&x={{x}}&y={{y}}&z={{z}}",
-            attr="Google",
-            name=name,
-            overlay=False,
-            control=True,
-        ).add_to(fmap)
-    folium.LayerControl().add_to(fmap)
-    fmap.add_child(plugins.MiniMap(toggle_display=True))
-    plugins.ScrollZoomToggler().add_to(fmap)
-    plugins.Fullscreen(position="topright").add_to(fmap)
+    lay_bearing = float(azimuth_of_lay) * 180 / 3200
 
-    app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    icons_dir = os.path.join(app_dir, "Icons")
-    launch_icon_path = os.path.join(icons_dir, "paladin.jpg")
-    impact_icon_path = os.path.join(icons_dir, "target.png")
-    launch_icon = folium.features.CustomIcon(launch_icon_path, icon_size=(30, 20)) if os.path.exists(launch_icon_path) else folium.Icon(color="green")
-    impact_icon = folium.features.CustomIcon(impact_icon_path, icon_size=(25, 25)) if os.path.exists(impact_icon_path) else folium.Icon(color="red")
-    folium.Marker([launch_lat, launch_lon], tooltip="Launch Point", icon=launch_icon).add_to(fmap)
-    folium.Marker([impact_lat, impact_lon], tooltip="Impact Point", icon=impact_icon).add_to(fmap)
-    folium.PolyLine([[launch_lat, launch_lon], [impact_lat, impact_lon]], color="red", weight=3).add_to(fmap)
-    folium.Circle([launch_lat, launch_lon], radius=20000, color="red", fill=True, fill_color="red", fill_opacity=0.1).add_to(fmap)
-    lay_endpoint = zf.vPolar(launch_lat, launch_lon, float(azimuth_of_lay) * 180 / 3200, 20000)
-    folium.PolyLine([[launch_lat, launch_lon], list(lay_endpoint)], color="blue", weight=3, tooltip="Azimuth of lay").add_to(fmap)
-    fmap.add_child(folium.LatLngPopup())
-    return fmap._repr_html_()
+    route = _sample_map_line(launch, bearing_deg, range_m, impact)
+    lay_line = _sample_map_line(launch, lay_bearing, 20000)
+    ring = []
+    for index in range(97):
+        latitude, longitude = zf.vPolar(launch_lat, launch_lon, index * 360 / 96, 20000)
+        ring.append([float(longitude), float(latitude)])
+
+    overlays = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature", "properties": {"kind": "gtl"}, "geometry": {"type": "MultiLineString", "coordinates": zf.split_antimeridian_line(route)}},
+            {"type": "Feature", "properties": {"kind": "lay"}, "geometry": {"type": "MultiLineString", "coordinates": zf.split_antimeridian_line(lay_line)}},
+            {"type": "Feature", "properties": {"kind": "range"}, "geometry": {"type": "MultiLineString", "coordinates": zf.split_antimeridian_line(ring)}},
+            {"type": "Feature", "properties": {"kind": "launch", "label": "Launch Point"}, "geometry": {"type": "Point", "coordinates": [launch_lon, launch_lat]}},
+            {"type": "Feature", "properties": {"kind": "impact", "label": "Impact Point"}, "geometry": {"type": "Point", "coordinates": [impact_lon, impact_lat]}},
+        ],
+    }
+    launch_json = json.dumps([launch_lon, launch_lat])
+    overlays_json = json.dumps(overlays)
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://unpkg.com/maplibre-gl@6.19.0/dist/maplibre-gl.css" rel="stylesheet">
+<style>html,body,#af-map{{width:100%;height:100%;margin:0;overflow:hidden}} .map-error{{position:absolute;z-index:2;left:12px;top:12px;padding:8px 12px;background:#fff;color:#222;font:13px sans-serif;border-radius:4px}}</style>
+</head><body><div id="af-map"></div>
+<script type="module">
+import * as maplibregl from 'https://unpkg.com/maplibre-gl@6.19.0/dist/maplibre-gl.mjs';
+const overlays = {overlays_json};
+const map = new maplibregl.Map({{
+  container:'af-map', style:'https://tiles.openfreemap.org/styles/liberty',
+  center:{launch_json}, zoom:9, pitch:40, maxPitch:85, dragRotate:true, touchZoomRotate:true
+}});
+map.addControl(new maplibregl.NavigationControl({{visualizePitch:true}}), 'top-right');
+map.addControl(new maplibregl.ScaleControl({{maxWidth:120, unit:'metric'}}), 'bottom-left');
+map.addControl(new maplibregl.FullscreenControl(), 'top-right');
+map.once('style.load', () => {{
+  map.setProjection({{type:'globe'}});
+  map.addSource('af-elevation', {{type:'raster-dem', url:'https://tiles.mapterhorn.com/tilejson.json'}});
+  const firstLabel = map.getStyle().layers.find((layer) => layer.type === 'symbol');
+  map.addLayer({{id:'af-hillshade',type:'hillshade',source:'af-elevation',paint:{{'hillshade-exaggeration':0.35}}}}, firstLabel && firstLabel.id);
+  map.setTerrain({{source:'af-elevation',exaggeration:3.0}});
+  map.setSky({{'sky-color':'#081522','sky-horizon-blend':0.35,'atmosphere-blend':0.8}});
+  map.addSource('af-overlays', {{type:'geojson',data:overlays}});
+  map.addLayer({{id:'af-range',type:'line',source:'af-overlays',filter:['==',['get','kind'],'range'],paint:{{'line-color':'#dc2626','line-width':2,'line-opacity':0.75}}}});
+  map.addLayer({{id:'af-lay',type:'line',source:'af-overlays',filter:['==',['get','kind'],'lay'],paint:{{'line-color':'#1976d2','line-width':3}}}});
+  map.addLayer({{id:'af-gtl',type:'line',source:'af-overlays',filter:['==',['get','kind'],'gtl'],paint:{{'line-color':'#e32636','line-width':3}}}});
+  map.addLayer({{id:'af-points',type:'circle',source:'af-overlays',filter:['in',['get','kind'],['literal',['launch','impact']]],paint:{{'circle-radius':8,'circle-color':['match',['get','kind'],'launch','#16803c','#d62828'],'circle-stroke-color':'#fff','circle-stroke-width':2}}}});
+  map.addLayer({{id:'af-labels',type:'symbol',source:'af-overlays',filter:['in',['get','kind'],['literal',['launch','impact']]],layout:{{'text-field':['get','label'],'text-offset':[0,1.2],'text-size':13,'text-allow-overlap':true}},paint:{{'text-color':'#111827','text-halo-color':'#fff','text-halo-width':1.5}}}});
+  const anchorLon = overlays.features.find((feature) => feature.properties.kind === 'launch').geometry.coordinates[0];
+  const extent = overlays.features.filter((feature) => feature.geometry.type === 'MultiLineString').flatMap((feature) => {{
+    let previousLon = anchorLon;
+    return feature.geometry.coordinates.flat().map(([longitude, latitude]) => {{
+      let adjustedLon = longitude;
+      while (adjustedLon - previousLon > 180) adjustedLon -= 360;
+      while (adjustedLon - previousLon < -180) adjustedLon += 360;
+      previousLon = adjustedLon;
+      return [adjustedLon, latitude];
+    }});
+  }});
+  const bounds = extent.reduce((box, coordinate) => box.extend(coordinate), new maplibregl.LngLatBounds(extent[0], extent[0]));
+  map.fitBounds(bounds, {{padding:55,maxZoom:12,pitch:45,duration:0}});
+  map.on('click', (event) => new maplibregl.Popup().setLngLat(event.lngLat).setText(`${{event.lngLat.lat.toFixed(5)}}, ${{event.lngLat.lng.toFixed(5)}}`).addTo(map));
+}});
+map.on('error', (event) => {{
+  if (document.querySelector('.map-error')) return;
+  const message = document.createElement('div'); message.className = 'map-error';
+  const source = event.sourceId || 'map';
+  const detail = event.error && event.error.message ? `: ${{event.error.message}}` : '';
+  message.textContent = `${{source}} could not load${{detail}}`;
+  document.body.appendChild(message);
+}});
+</script>
+<div style="position:absolute;right:6px;bottom:4px;z-index:3;background:#ffffffdd;padding:3px 6px;font:11px sans-serif;color:#222">
+<a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre</a> |
+<a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">© Mapterhorn</a> |
+<a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> |
+<a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> |
+Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+</div></body></html>"""
 
 
 def _missing_solver_message():
@@ -373,7 +431,7 @@ def update_shot(launch_mgrs, impact_mgrs, launch_alt, impact_alt, mass, velocity
         launch_lat, launch_lon = float(launch[1]), float(launch[2])
         impact_lat, impact_lon = float(impact[1]), float(impact[2])
         range_m, azimuth_deg = zf.LLDist(launch_lat, launch_lon, impact_lat, impact_lon)
-        map_html = _make_map(launch, impact, aol)
+        map_html = _make_map(launch, impact, aol, range_m, azimuth_deg)
         launch_mils = azimuth_deg * 3200 / 180
         diagnostics = html.Div(
             [

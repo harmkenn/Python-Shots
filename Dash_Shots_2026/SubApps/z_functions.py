@@ -228,6 +228,35 @@ def vPolar(lat: float, lon: float, bearing_deg: float, dist_m: float) -> Tuple[f
     return math.degrees(phi2), (math.degrees(lambda2) + 540) % 360 - 180
 
 
+def split_antimeridian_line(coordinates: List[List[float]]) -> List[List[List[float]]]:
+    """Split GeoJSON [longitude, latitude] line coordinates at +/-180 degrees."""
+    if len(coordinates) < 2:
+        return [coordinates]
+
+    parts = [[coordinates[0]]]
+    for next_point in coordinates[1:]:
+        previous_lon, previous_lat = parts[-1][-1]
+        next_lon, next_lat = next_point
+        delta = next_lon - previous_lon
+
+        if delta < -180:
+            unwrapped_lon = next_lon + 360
+            edge_lon, opposite_edge_lon = 180, -180
+        elif delta > 180:
+            unwrapped_lon = next_lon - 360
+            edge_lon, opposite_edge_lon = -180, 180
+        else:
+            parts[-1].append([next_lon, next_lat])
+            continue
+
+        fraction = (edge_lon - previous_lon) / (unwrapped_lon - previous_lon)
+        crossing_lat = previous_lat + fraction * (next_lat - previous_lat)
+        parts[-1].append([edge_lon, crossing_lat])
+        parts.append([[opposite_edge_lon, crossing_lat], [next_lon, next_lat]])
+
+    return [part for part in parts if len(part) >= 2]
+
+
 # =====================================================================
 # 3. Google Geocoding Lookup
 # =====================================================================

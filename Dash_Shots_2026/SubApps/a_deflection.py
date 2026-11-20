@@ -1,10 +1,8 @@
-import os
+import json
+
 import dash
 from dash import html, dcc, Input, Output, State, callback
 import dash_bootstrap_components as dbc
-import folium
-from folium import plugins
-import pandas as pd
 
 # Import helper functions module
 from SubApps import z_functions as zf
@@ -99,9 +97,9 @@ layout = dbc.Container(
                                 dbc.CardHeader("Interactive Tactical Map"),
                                 dbc.CardBody(
                                     [
-                                        # Embedded Folium Map Container
                                         html.Iframe(
                                             id="def-map-iframe",
+                                            title="OpenStreetMap tactical map with terrain",
                                             style={"width": "100%", "height": "500px", "border": "none"},
                                         )
                                     ]
@@ -194,6 +192,135 @@ def process_lookup(n_clicks, lu):
 
 
 # Callback 3: Update Map & Fire Control Metrics
+def _sample_geodesic(start, bearing, distance, end=None, segments=80):
+    """Return [longitude, latitude] samples along a geodesic."""
+    if distance <= 0:
+        return [[float(start[2]), float(start[1])]]
+    points = []
+    for index in range(segments + 1):
+        latitude, longitude = zf.vPolar(
+            float(start[1]), float(start[2]), bearing, distance * index / segments
+        )
+        points.append([float(longitude), float(latitude)])
+    if end is not None:
+        points[-1] = [float(end[2]), float(end[1])]
+    return points
+
+
+def _make_map_html(launch, impact, launch_mgrs, impact_mgrs, azimuth_mils, distance, bearing):
+    azimuth_bearing = float(azimuth_mils) * 180 / 3200
+    route = _sample_geodesic(launch, bearing, distance, impact)
+    azimuth = _sample_geodesic(launch, azimuth_bearing, 30000)
+    ring = []
+    for index in range(97):
+        latitude, longitude = zf.vPolar(
+            float(launch[1]), float(launch[2]), index * 360 / 96, 30000
+        )
+        ring.append([float(longitude), float(latitude)])
+
+    overlays = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature", "properties": {"kind": "azimuth"}, "geometry": {"type": "MultiLineString", "coordinates": zf.split_antimeridian_line(azimuth)}},
+            {"type": "Feature", "properties": {"kind": "gtl"}, "geometry": {"type": "MultiLineString", "coordinates": zf.split_antimeridian_line(route)}},
+            {"type": "Feature", "properties": {"kind": "range"}, "geometry": {"type": "MultiLineString", "coordinates": zf.split_antimeridian_line(ring)}},
+            {"type": "Feature", "properties": {"kind": "start", "label": "Start Point", "mgrs": launch_mgrs}, "geometry": {"type": "Point", "coordinates": [float(launch[2]), float(launch[1])]}},
+            {"type": "Feature", "properties": {"kind": "end", "label": "End Point", "mgrs": impact_mgrs}, "geometry": {"type": "Point", "coordinates": [float(impact[2]), float(impact[1])]}},
+        ],
+    }
+    center = json.dumps([float(launch[2]), float(launch[1])])
+    overlays_json = json.dumps(overlays)
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://unpkg.com/maplibre-gl@6.19.0/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+html,body,#def-map{{width:100%;height:100%;margin:0;overflow:hidden}}
+.map-error{{position:absolute;z-index:2;left:12px;top:12px;padding:8px 12px;background:#fff;color:#222;font:13px sans-serif;border-radius:4px}}
+</style></head><body><div id="def-map"></div>
+<script type="module">
+import * as maplibregl from 'https://unpkg.com/maplibre-gl@6.19.0/dist/maplibre-gl.mjs';
+const overlays = {overlays_json};
+const map = new maplibregl.Map({{
+  container:'def-map', style:'https://tiles.openfreemap.org/styles/liberty',
+  center:{center}, zoom:9, pitch:45, maxPitch:85, dragRotate:true, touchZoomRotate:true
+}});
+map.addControl(new maplibregl.NavigationControl({{visualizePitch:true}}), 'top-right');
+map.addControl(new maplibregl.ScaleControl({{maxWidth:120, unit:'metric'}}), 'bottom-left');
+map.addControl(new maplibregl.FullscreenControl(), 'top-right');
+map.on('style.load', () => {{
+  map.setProjection({{type:'globe'}});
+  map.addSource('def-elevation', {{type:'raster-dem', url:'https://tiles.mapterhorn.com/tilejson.json'}});
+  const firstLabel = map.getStyle().layers.find((layer) => layer.type === 'symbol');
+  map.addLayer({{
+    id:'def-hillshade', type:'hillshade', source:'def-elevation',
+    paint:{{'hillshade-exaggeration':0.35}}
+  }}, firstLabel && firstLabel.id);
+  map.setTerrain({{source:'def-elevation', exaggeration:3.0}});
+  map.setSky({{'sky-color':'#081522', 'sky-horizon-blend':0.35, 'atmosphere-blend':0.8}});
+  map.addSource('def-overlays', {{type:'geojson', data:overlays}});
+  map.addLayer({{
+    id:'def-range-ring', type:'line', source:'def-overlays',
+    filter:['==',['get','kind'],'range'],
+    paint:{{'line-color':'#14833b','line-width':2,'line-opacity':0.8}}
+  }});
+  map.addLayer({{
+    id:'def-azimuth', type:'line', source:'def-overlays',
+    filter:['==',['get','kind'],'azimuth'],
+    paint:{{'line-color':'#1976d2','line-width':3}}
+  }});
+  map.addLayer({{
+    id:'def-gtl', type:'line', source:'def-overlays',
+    filter:['==',['get','kind'],'gtl'],
+    paint:{{'line-color':'#e32636','line-width':3}}
+  }});
+  map.addLayer({{
+    id:'def-points', type:'circle', source:'def-overlays',
+    filter:['in',['get','kind'],['literal',['start','end']]],
+    paint:{{'circle-radius':8,'circle-color':['match',['get','kind'],'start','#16803c','#d62828'],'circle-stroke-color':'#fff','circle-stroke-width':2}}
+  }});
+  map.addLayer({{
+    id:'def-labels', type:'symbol', source:'def-overlays',
+    filter:['in',['get','kind'],['literal',['start','end']]],
+    layout:{{'text-field':['get','label'],'text-offset':[0,1.2],'text-size':13,'text-allow-overlap':true}},
+    paint:{{'text-color':'#111827','text-halo-color':'#fff','text-halo-width':1.5}}
+  }});
+  const launchFeature = overlays.features.find((feature) => feature.properties.kind === 'start');
+  const anchorLongitude = launchFeature.geometry.coordinates[0];
+  const extent = overlays.features
+    .filter((feature) => feature.geometry.type === 'MultiLineString')
+    .flatMap((feature) => {{
+      let previousLongitude = anchorLongitude;
+      return feature.geometry.coordinates.flat().map(([longitude, latitude]) => {{
+        let adjustedLongitude = longitude;
+        while (adjustedLongitude - previousLongitude > 180) adjustedLongitude -= 360;
+        while (adjustedLongitude - previousLongitude < -180) adjustedLongitude += 360;
+        previousLongitude = adjustedLongitude;
+        return [adjustedLongitude, latitude];
+      }});
+    }});
+  const bounds = extent.reduce((box, coordinate) => box.extend(coordinate), new maplibregl.LngLatBounds(extent[0], extent[0]));
+  map.fitBounds(bounds, {{padding:55, maxZoom:12, pitch:45, duration:0}});
+}});
+map.on('error', (event) => {{
+  if (document.querySelector('.map-error')) return;
+  const message = document.createElement('div');
+  message.className = 'map-error';
+  const source = event.sourceId || 'map';
+  const detail = event.error && event.error.message ? `: ${{event.error.message}}` : '';
+  message.textContent = `${{source}} could not load${{detail}}`;
+  document.body.appendChild(message);
+}});
+</script>
+<div style="position:absolute;right:6px;bottom:4px;z-index:3;background:#ffffffdd;padding:3px 6px;font:11px sans-serif;color:#222">
+<a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre</a> |
+<a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">© Mapterhorn</a> |
+<a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> |
+<a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> |
+Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+</div>
+</body></html>"""
+
+
 @callback(
     Output("def-map-iframe", "srcDoc"),
     Output("def-tp-output", "children"),
@@ -219,90 +346,10 @@ def update_map_and_metrics(aof, lpmgrs, ipmgrs):
             ]
         )
 
-        # Generate Map using Folium
-        fmap = folium.Map(location=[lp[1], lp[2]], zoom_start=10)
-
-        # Layers
-        folium.TileLayer('OpenStreetMap').add_to(fmap)
-        folium.TileLayer(
-            tiles='https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
-            attr='Google',
-            name='Google Maps',
-            overlay=False
-        ).add_to(fmap)
-        folium.TileLayer(
-            tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-            attr='Google',
-            name='Google Satellite',
-            overlay=False
-        ).add_to(fmap)
-        folium.TileLayer(
-            tiles='https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
-            attr='Google',
-            name='Google Terrain',
-            overlay=False
-        ).add_to(fmap)
-
-        folium.LayerControl().add_to(fmap)
-        fmap.add_child(plugins.MiniMap(toggle_display=True))
-        plugins.ScrollZoomToggler().add_to(fmap)
-        plugins.Fullscreen(position='topright').add_to(fmap)
-
-        # Resolve icons relative to this app, so launching Dash from another
-        # working directory does not break the marker images.
-        app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        icons_dir = os.path.join(app_dir, 'Icons')
-        pal_path = os.path.join(icons_dir, 'paladin.jpg')
-        tgt_path = os.path.join(icons_dir, 'target.png')
-
-        # Icons & Markers for Start Point (lp) and End Point (ip)
-        if os.path.exists(pal_path) and os.path.exists(tgt_path):
-            pal = folium.features.CustomIcon(pal_path, icon_size=(30, 20))
-            tgt = folium.features.CustomIcon(tgt_path, icon_size=(25, 25))
-            
-            folium.Marker(
-                location=[lp[1], lp[2]], 
-                popup=lpmgrs, 
-                tooltip='Start Point', 
-                icon=pal
-            ).add_to(fmap)
-            
-            folium.Marker(
-                location=[ip[1], ip[2]], 
-                popup=ipmgrs, 
-                tooltip='End Point', 
-                icon=tgt
-            ).add_to(fmap)
-        else:
-            print(f"Icon files not found at:\n - {pal_path}\n - {tgt_path}")
-            folium.Marker(
-                location=[lp[1], lp[2]], 
-                popup=lpmgrs, 
-                tooltip='Start Point', 
-                icon=folium.Icon(color='green')
-            ).add_to(fmap)
-            
-            folium.Marker(
-                location=[ip[1], ip[2]], 
-                popup=ipmgrs, 
-                tooltip='End Point', 
-                icon=folium.Icon(color='red')
-            ).add_to(fmap)
-
-        # Polylines & Range Rings
-        pback = zf.vPolar(lp[1], lp[2], aof * 180 / 3200, 30000)
-        folium.PolyLine([[lp[1], lp[2]], [pback[0], pback[1]]], tooltip='Azimuth of Fire', popup=str(aof)).add_to(fmap)
-        folium.PolyLine([[lp[1], lp[2]], [ip[1], ip[2]]], color='red', tooltip='Gun Target Line', popup='GTL').add_to(fmap)
-        folium.Circle(radius=30000, location=[lp[1], lp[2]], color='green').add_to(fmap)
-
-        plugins.Draw().add_to(fmap)
-
-        # Convert Folium map to HTML string for the Iframe container
-        map_html = fmap._repr_html_()
-
         # Calculation Details
         deets = zf.LLDist(lp[1], lp[2], ip[1], ip[2])
         bearing_deg = deets[1]
+        map_html = _make_map_html(lp, ip, lpmgrs, ipmgrs, aof, deets[0], bearing_deg)
         azimuth_mils = bearing_deg * 3200 / 180
         diff = round(aof - azimuth_mils + 3200, 0)
         if diff < 0:

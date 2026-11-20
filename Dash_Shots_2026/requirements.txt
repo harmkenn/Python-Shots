@@ -1,9 +1,9 @@
-streamlit
+
 numpy
 pandas
 plotly
 folium
-streamlit_folium
+
 pygeodesy
 scipy
 plotly.express

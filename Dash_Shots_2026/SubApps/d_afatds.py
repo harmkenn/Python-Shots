@@ -310,7 +310,7 @@ def _sample_map_line(start, bearing, distance, end=None, segments=80):
     return points
 
 
-def _make_map(launch, impact, azimuth_of_lay, range_m, bearing_deg):
+def _make_map(launch, impact, azimuth_of_lay, range_m, bearing_deg, flight_path=None, launch_altitude=None, impact_altitude=None):
     launch_lat, launch_lon = float(launch[1]), float(launch[2])
     impact_lat, impact_lon = float(impact[1]), float(impact[2])
     lay_bearing = float(azimuth_of_lay) * 180 / 3200
@@ -333,7 +333,11 @@ def _make_map(launch, impact, azimuth_of_lay, range_m, bearing_deg):
         ],
     }
     launch_json = json.dumps([launch_lon, launch_lat])
+    impact_json = json.dumps([impact_lon, impact_lat])
     overlays_json = json.dumps(overlays)
+    flight_path_json = json.dumps(flight_path or [])
+    launch_altitude_json = json.dumps(launch_altitude)
+    impact_altitude_json = json.dumps(impact_altitude)
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link href="https://unpkg.com/maplibre-gl@6.19.0/dist/maplibre-gl.css" rel="stylesheet">
@@ -342,6 +346,9 @@ def _make_map(launch, impact, azimuth_of_lay, range_m, bearing_deg):
 <script type="module">
 import * as maplibregl from 'https://unpkg.com/maplibre-gl@6.19.0/dist/maplibre-gl.mjs';
 const overlays = {overlays_json};
+const flightPath = {flight_path_json};
+const modeledLaunchAltitude = {launch_altitude_json};
+const modeledImpactAltitude = {impact_altitude_json};
 const map = new maplibregl.Map({{
   container:'af-map', style:'https://tiles.openfreemap.org/styles/liberty',
   center:{launch_json}, zoom:9, pitch:40, maxPitch:85, dragRotate:true, touchZoomRotate:true
@@ -350,16 +357,112 @@ map.addControl(new maplibregl.NavigationControl({{visualizePitch:true}}), 'top-r
 map.addControl(new maplibregl.ScaleControl({{maxWidth:120, unit:'metric'}}), 'bottom-left');
 map.addControl(new maplibregl.FullscreenControl(), 'top-right');
 map.once('style.load', () => {{
-  map.setProjection({{type:'globe'}});
   map.addSource('af-elevation', {{type:'raster-dem', url:'https://tiles.mapterhorn.com/tilejson.json'}});
   const firstLabel = map.getStyle().layers.find((layer) => layer.type === 'symbol');
   map.addLayer({{id:'af-hillshade',type:'hillshade',source:'af-elevation',paint:{{'hillshade-exaggeration':0.35}}}}, firstLabel && firstLabel.id);
-  map.setTerrain({{source:'af-elevation',exaggeration:3.0}});
+  // Keep the terrain and the trajectory on the same true vertical scale.
+  map.setTerrain({{source:'af-elevation',exaggeration:1.0}});
   map.setSky({{'sky-color':'#081522','sky-horizon-blend':0.35,'atmosphere-blend':0.8}});
   map.addSource('af-overlays', {{type:'geojson',data:overlays}});
   map.addLayer({{id:'af-range',type:'line',source:'af-overlays',filter:['==',['get','kind'],'range'],paint:{{'line-color':'#dc2626','line-width':2,'line-opacity':0.75}}}});
   map.addLayer({{id:'af-lay',type:'line',source:'af-overlays',filter:['==',['get','kind'],'lay'],paint:{{'line-color':'#1976d2','line-width':3}}}});
   map.addLayer({{id:'af-gtl',type:'line',source:'af-overlays',filter:['==',['get','kind'],'gtl'],paint:{{'line-color':'#e32636','line-width':3}}}});
+  if (flightPath.length > 1) {{
+    const flightLayer = {{
+      id:'af-flight-path', type:'custom', renderingMode:'3d',
+      onAdd(map, gl) {{
+        const vertex = `#version 300 es
+          in vec3 a_prev; in vec3 a_curr; in vec3 a_next; in float a_side;
+          uniform mat4 u_matrix; uniform vec2 u_resolution; uniform float u_width;
+          void main() {{
+            vec4 prev = u_matrix * vec4(a_prev, 1.0);
+            vec4 curr = u_matrix * vec4(a_curr, 1.0);
+            vec4 next = u_matrix * vec4(a_next, 1.0);
+            vec2 p0 = prev.xy / prev.w; vec2 p1 = curr.xy / curr.w; vec2 p2 = next.xy / next.w;
+            vec2 v0 = p1 - p0; vec2 v1 = p2 - p1;
+            float len0 = length(v0); float len1 = length(v1);
+            vec2 d0 = len0 > 0.000001 ? v0 / len0 : vec2(0.0);
+            vec2 d1 = len1 > 0.000001 ? v1 / len1 : vec2(0.0);
+            vec2 direction = d0 + d1;
+            vec2 tangent = length(direction) > 0.000001 ? normalize(direction) : (len1 > 0.000001 ? d1 : d0);
+            vec2 normal = vec2(-tangent.y, tangent.x);
+            curr.xy += normal * a_side * u_width * curr.w / u_resolution;
+            gl_Position = curr;
+          }}`;
+        const fragment = `#version 300 es\n precision highp float; uniform vec4 u_color; out vec4 color; void main() {{ color = u_color; }}`;
+        const compile = (type, source) => {{
+          const shader = gl.createShader(type); gl.shaderSource(shader, source); gl.compileShader(shader);
+          if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
+          return shader;
+        }};
+        this.program = gl.createProgram();
+        gl.attachShader(this.program, compile(gl.VERTEX_SHADER, vertex));
+        gl.attachShader(this.program, compile(gl.FRAGMENT_SHADER, fragment));
+        gl.linkProgram(this.program);
+        if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(this.program));
+        this.buffer = gl.createBuffer();
+        this.map = map;
+        this.gl = gl;
+        this.launchCoordinate = {launch_json};
+        this.impactCoordinate = {impact_json};
+        this.lastGroundOffsets = null;
+        this.vertexCount = flightPath.length;
+        this.updatePositions = (launchOffset, impactOffset) => {{
+          const mapPoints = flightPath.map(([lon, lat, altitude, pathProgress], index) => {{
+            const progress = Number.isFinite(pathProgress) ? pathProgress : index / Math.max(flightPath.length - 1, 1);
+            const groundOffset = launchOffset + (impactOffset - launchOffset) * progress;
+            const adjusted = maplibregl.MercatorCoordinate.fromLngLat([lon, lat], altitude + groundOffset);
+            return [adjusted.x, adjusted.y, adjusted.z];
+          }});
+          const positions = mapPoints.flatMap((point, index) => {{
+            const previous = mapPoints[Math.max(0, index - 1)];
+            const next = mapPoints[Math.min(mapPoints.length - 1, index + 1)];
+            return [-1, 1].flatMap((side) => [...previous, ...point, ...next, side]);
+          }});
+          gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+          gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+          gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        }};
+        this.updatePositions(0, 0);
+      }},
+      render(gl, args) {{
+        const launchGround = this.map.queryTerrainElevation(this.launchCoordinate);
+        const impactGround = this.map.queryTerrainElevation(this.impactCoordinate);
+        if (launchGround !== null && impactGround !== null && Number.isFinite(launchGround) && Number.isFinite(impactGround)) {{
+          const launchOffset = launchGround - Number(modeledLaunchAltitude || 0);
+          const impactOffset = impactGround - Number(modeledImpactAltitude || 0);
+          if (this.lastGroundOffsets === null || Math.abs(launchOffset - this.lastGroundOffsets[0]) > 0.5 || Math.abs(impactOffset - this.lastGroundOffsets[1]) > 0.5) {{
+            this.updatePositions(launchOffset, impactOffset);
+            this.lastGroundOffsets = [launchOffset, impactOffset];
+          }}
+        }}
+        gl.useProgram(this.program);
+        gl.uniformMatrix4fv(gl.getUniformLocation(this.program, 'u_matrix'), false, args.defaultProjectionData.mainMatrix);
+        gl.uniform2f(gl.getUniformLocation(this.program, 'u_resolution'), gl.drawingBufferWidth, gl.drawingBufferHeight);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+        const stride = 10 * Float32Array.BYTES_PER_ELEMENT;
+        const attributes = [['a_prev', 3, 0], ['a_curr', 3, 3], ['a_next', 3, 6], ['a_side', 1, 9]];
+        for (const [name, size, offset] of attributes) {{
+          const location = gl.getAttribLocation(this.program, name);
+          gl.enableVertexAttribArray(location);
+          gl.vertexAttribPointer(location, size, gl.FLOAT, false, stride, offset * Float32Array.BYTES_PER_ELEMENT);
+        }}
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthFunc(gl.LEQUAL);
+        const colorLocation = gl.getUniformLocation(this.program, 'u_color');
+        gl.uniform4f(colorLocation, 1, 1, 1, 1);
+        gl.uniform1f(gl.getUniformLocation(this.program, 'u_width'), 10);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.vertexCount * 2);
+        gl.uniform4f(colorLocation, 0, 0, 0, 1);
+        gl.uniform1f(gl.getUniformLocation(this.program, 'u_width'), 6);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.vertexCount * 2);
+        for (const [name] of attributes) gl.disableVertexAttribArray(gl.getAttribLocation(this.program, name));
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        gl.useProgram(null);
+      }}
+    }};
+    map.addLayer(flightLayer);
+  }}
   map.addLayer({{id:'af-points',type:'circle',source:'af-overlays',filter:['in',['get','kind'],['literal',['launch','impact']]],paint:{{'circle-radius':8,'circle-color':['match',['get','kind'],'launch','#16803c','#d62828'],'circle-stroke-color':'#fff','circle-stroke-width':2}}}});
   map.addLayer({{id:'af-labels',type:'symbol',source:'af-overlays',filter:['in',['get','kind'],['literal',['launch','impact']]],layout:{{'text-field':['get','label'],'text-offset':[0,1.2],'text-size':13,'text-allow-overlap':true}},paint:{{'text-color':'#111827','text-halo-color':'#fff','text-halo-width':1.5}}}});
   const anchorLon = overlays.features.find((feature) => feature.properties.kind === 'launch').geometry.coordinates[0];
@@ -431,7 +534,6 @@ def update_shot(launch_mgrs, impact_mgrs, launch_alt, impact_alt, mass, velocity
         launch_lat, launch_lon = float(launch[1]), float(launch[2])
         impact_lat, impact_lon = float(impact[1]), float(impact[2])
         range_m, azimuth_deg = zf.LLDist(launch_lat, launch_lon, impact_lat, impact_lon)
-        map_html = _make_map(launch, impact, aol, range_m, azimuth_deg)
         launch_mils = azimuth_deg * 3200 / 180
         diagnostics = html.Div(
             [
@@ -444,6 +546,7 @@ def update_shot(launch_mgrs, impact_mgrs, launch_alt, impact_alt, mass, velocity
 
         missing_message = _missing_solver_message()
         if missing_message:
+            map_html = _make_map(launch, impact, aol, range_m, azimuth_deg)
             return map_html, html.Div([diagnostics, dbc.Alert(missing_message, color="warning")]), empty_figure
 
         high_angle = angle_mode == "high"
@@ -466,16 +569,33 @@ def update_shot(launch_mgrs, impact_mgrs, launch_alt, impact_alt, mass, velocity
         elevation_deg = float(solution[0]) / 3200 * 180
         motion = zf.projectile_motion_with_drag(
             float(velocity), elevation_deg, mass_kg, 0.25, area,
-            launch_lat, azimuth_deg, float(launch_alt), float(launch_alt), spin_velocity,
+            launch_lat, azimuth_deg, float(launch_alt), float(impact_alt), spin_velocity,
         )
         time_of_flight, final_x, final_y, final_z, times, x_vals, y_vals, z_vals, vx, vy, vz, v_mag, qe = motion
         import pandas as pd
 
-        trajectory = pd.DataFrame({"time": times, "distance": x_vals, "height": y_vals})
-        trajectory["distance"] = trajectory["distance"] / max(trajectory["distance"]) * range_m
-        trajectory["height"] = (
-            trajectory["height"] - float(launch_alt)
-        ) / max(trajectory["height"] - float(launch_alt)) * (float(solution[1]) - float(launch_alt)) + float(launch_alt)
+        horizontal_scale = range_m / max(float(x_vals[-1]), 1e-6)
+        end_altitude_correction = float(impact_alt) - float(y_vals[-1])
+        corrected_heights = [
+            float(altitude) + index / max(len(y_vals) - 1, 1) * end_altitude_correction
+            for index, altitude in enumerate(y_vals)
+        ]
+        trajectory = pd.DataFrame({"time": times, "distance": [float(value) * horizontal_scale for value in x_vals], "height": corrected_heights})
+        trajectory.loc[trajectory.index[-1], "distance"] = range_m
+        flight_path = []
+        for distance, altitude, drift in zip(x_vals, corrected_heights, z_vals):
+            path_progress = float(distance) / max(float(x_vals[-1]), 1e-6)
+            distance = float(distance) * horizontal_scale
+            drift = float(drift) * horizontal_scale
+            travel_distance = math.hypot(distance, drift)
+            travel_bearing = azimuth_deg + math.degrees(math.atan2(drift, distance))
+            latitude, longitude = zf.vPolar(launch_lat, launch_lon, travel_bearing, travel_distance)
+            flight_path.append([float(longitude), float(latitude), float(altitude), path_progress])
+        flight_path[-1] = [impact_lon, impact_lat, float(impact_alt), 1.0]
+        map_html = _make_map(
+            launch, impact, aol, range_m, azimuth_deg, flight_path,
+            float(launch_alt), float(impact_alt),
+        )
         figure = px.line(
             trajectory,
             x="distance",

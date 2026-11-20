@@ -1,17 +1,15 @@
 """Physics-based projectile planning page for the Dash Shots app."""
 
 import math
-import os
+import json
 
 import dash
 from dash import Input, Output, State, callback, dcc, html
 import dash_bootstrap_components as dbc
-import folium
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from folium import plugins
 
 from SubApps import z_functions as zf
 
@@ -193,56 +191,121 @@ def _trajectory_figure(data, model_range):
     return figure
 
 
-def _build_map(launch, impact, launch_mgrs, impact_mgrs, bearing, distance):
+def _build_map(launch, impact, launch_mgrs, impact_mgrs, bearing, distance, flight_path, launch_altitude):
     launch_lat, launch_lon = float(launch[1]), float(launch[2])
     impact_lat, impact_lon = float(impact[0]), float(impact[1])
-    lon_delta = ((impact_lon - launch_lon + 180) % 360) - 180
-    center_lon = ((launch_lon + lon_delta / 2 + 180) % 360) - 180
-    zoom = max(2, min(15, int(-1.36 * math.log(max(float(distance), 1) / 1000) + 15)))
-    fmap = folium.Map(location=[(launch_lat + impact_lat) / 2, center_lon], zoom_start=zoom)
-    folium.TileLayer("OpenStreetMap", name="Open Street Map").add_to(fmap)
-    for layer, name in (("m", "Google Maps"), ("s", "Google Satellite"), ("p", "Google Terrain")):
-        folium.TileLayer(
-            tiles=f"https://mt1.google.com/vt/lyrs={layer}&x={{x}}&y={{y}}&z={{z}}",
-            attr="Google",
-            name=name,
-            overlay=False,
-            control=True,
-        ).add_to(fmap)
-    folium.LayerControl().add_to(fmap)
-    fmap.add_child(plugins.MiniMap(toggle_display=True))
-    plugins.ScrollZoomToggler().add_to(fmap)
-    plugins.Fullscreen(position="topright").add_to(fmap)
-
-    app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    icons_dir = os.path.join(app_dir, "Icons")
-    launch_icon_path = os.path.join(icons_dir, "paladin.jpg")
-    impact_icon_path = os.path.join(icons_dir, "target.png")
-    launch_icon = (
-        folium.features.CustomIcon(launch_icon_path, icon_size=(30, 20))
-        if os.path.exists(launch_icon_path)
-        else folium.Icon(color="green")
-    )
-    impact_icon = (
-        folium.features.CustomIcon(impact_icon_path, icon_size=(25, 25))
-        if os.path.exists(impact_icon_path)
-        else folium.Icon(color="red")
-    )
-    folium.Marker(
-        [launch_lat, launch_lon], popup=launch_mgrs, tooltip="Launch Point", icon=launch_icon
-    ).add_to(fmap)
-    folium.Marker(
-        [impact_lat, impact_lon], popup=impact_mgrs, tooltip="Impact Point", icon=impact_icon
-    ).add_to(fmap)
-    folium.PolyLine(
-        [[launch_lat, launch_lon], [impact_lat, impact_lon]],
-        color="red",
-        weight=3,
-        tooltip="Predicted trajectory ground track",
-    ).add_to(fmap)
-    plugins.Draw().add_to(fmap)
-    fmap.add_child(folium.LatLngPopup())
-    return fmap._repr_html_()
+    features = [
+        {"type": "Feature", "properties": {"kind": "ground-track"}, "geometry": {"type": "LineString", "coordinates": [[launch_lon, launch_lat], [impact_lon, impact_lat]]}},
+        {"type": "Feature", "properties": {"kind": "launch", "label": f"Launch Point ({launch_mgrs})"}, "geometry": {"type": "Point", "coordinates": [launch_lon, launch_lat]}},
+        {"type": "Feature", "properties": {"kind": "impact", "label": f"Impact Point ({impact_mgrs})"}, "geometry": {"type": "Point", "coordinates": [impact_lon, impact_lat]}},
+    ]
+    overlays_json = json.dumps({"type": "FeatureCollection", "features": features})
+    flight_path_json = json.dumps(flight_path)
+    launch_json = json.dumps([launch_lon, launch_lat])
+    impact_json = json.dumps([impact_lon, impact_lat])
+    launch_altitude_json = json.dumps(float(launch_altitude))
+    impact_altitude_json = json.dumps(float(launch_altitude))
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://unpkg.com/maplibre-gl@6.19.0/dist/maplibre-gl.css" rel="stylesheet">
+<style>html,body,#ep-map{{width:100%;height:100%;margin:0;overflow:hidden}}</style>
+</head><body><div id="ep-map"></div>
+<script type="module">
+import * as maplibregl from 'https://unpkg.com/maplibre-gl@6.19.0/dist/maplibre-gl.mjs';
+const overlays = {overlays_json};
+const flightPath = {flight_path_json};
+const launchAltitude = {launch_altitude_json};
+const impactAltitude = {impact_altitude_json};
+const launchCoordinate = {launch_json};
+const impactCoordinate = {impact_json};
+const map = new maplibregl.Map({{
+  container:'ep-map', style:'https://tiles.openfreemap.org/styles/liberty',
+  center:{launch_json}, zoom:9, pitch:45, maxPitch:85, dragRotate:true, touchZoomRotate:true
+}});
+map.addControl(new maplibregl.NavigationControl({{visualizePitch:true}}), 'top-right');
+map.addControl(new maplibregl.ScaleControl({{maxWidth:120, unit:'metric'}}), 'bottom-left');
+map.addControl(new maplibregl.FullscreenControl(), 'top-right');
+map.once('style.load', () => {{
+  map.addSource('ep-elevation', {{type:'raster-dem', url:'https://tiles.mapterhorn.com/tilejson.json'}});
+  const firstLabel = map.getStyle().layers.find((layer) => layer.type === 'symbol');
+  map.addLayer({{id:'ep-hillshade',type:'hillshade',source:'ep-elevation',paint:{{'hillshade-exaggeration':0.35}}}}, firstLabel && firstLabel.id);
+  map.setTerrain({{source:'ep-elevation',exaggeration:1.0}});
+  map.setSky({{'sky-color':'#081522','sky-horizon-blend':0.35,'atmosphere-blend':0.8}});
+  map.addSource('ep-overlays', {{type:'geojson', data:overlays}});
+  map.addLayer({{id:'ep-ground-track',type:'line',source:'ep-overlays',filter:['==',['get','kind'],'ground-track'],paint:{{'line-color':'#e32636','line-width':2,'line-dasharray':[2,2]}}}});
+  if (flightPath.length > 1) {{
+    const flightLayer = {{
+      id:'ep-flight-path', type:'custom', renderingMode:'3d',
+      onAdd(map, gl) {{
+        const vertex = `#version 300 es
+          in vec3 a_prev; in vec3 a_curr; in vec3 a_next; in float a_side;
+          uniform mat4 u_matrix; uniform vec2 u_resolution; uniform float u_width;
+          void main() {{
+            vec4 prev = u_matrix * vec4(a_prev, 1.0); vec4 curr = u_matrix * vec4(a_curr, 1.0); vec4 next = u_matrix * vec4(a_next, 1.0);
+            vec2 p0 = prev.xy / prev.w; vec2 p1 = curr.xy / curr.w; vec2 p2 = next.xy / next.w;
+            vec2 v0 = p1 - p0; vec2 v1 = p2 - p1; float len0 = length(v0); float len1 = length(v1);
+            vec2 d0 = len0 > 0.000001 ? v0 / len0 : vec2(0.0); vec2 d1 = len1 > 0.000001 ? v1 / len1 : vec2(0.0);
+            vec2 direction = d0 + d1; vec2 tangent = length(direction) > 0.000001 ? normalize(direction) : (len1 > 0.000001 ? d1 : d0);
+            vec2 normal = vec2(-tangent.y, tangent.x); curr.xy += normal * a_side * u_width * curr.w / u_resolution; gl_Position = curr;
+          }}`;
+        const fragment = `#version 300 es\n precision highp float; uniform vec4 u_color; out vec4 color; void main() {{ color = u_color; }}`;
+        const compile = (type, source) => {{
+          const shader = gl.createShader(type); gl.shaderSource(shader, source); gl.compileShader(shader);
+          if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
+          return shader;
+        }};
+        this.program = gl.createProgram();
+        gl.attachShader(this.program, compile(gl.VERTEX_SHADER, vertex));
+        gl.attachShader(this.program, compile(gl.FRAGMENT_SHADER, fragment));
+        gl.linkProgram(this.program);
+        if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(this.program));
+        this.buffer = gl.createBuffer(); this.map = map; this.lastOffsets = null; this.vertexCount = flightPath.length;
+        this.updatePositions = (launchOffset, impactOffset) => {{
+          const points = flightPath.map(([lon, lat, altitude, progress], index) => {{
+            const amount = Number.isFinite(progress) ? progress : index / Math.max(flightPath.length - 1, 1);
+            const offset = launchOffset + (impactOffset - launchOffset) * amount;
+            const point = maplibregl.MercatorCoordinate.fromLngLat([lon, lat], altitude + offset);
+            return [point.x, point.y, point.z];
+          }});
+          const vertices = points.flatMap((point, index) => {{
+            const previous = points[Math.max(0, index - 1)]; const next = points[Math.min(points.length - 1, index + 1)];
+            return [-1, 1].flatMap((side) => [...previous, ...point, ...next, side]);
+          }});
+          gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW); gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        }};
+        this.updatePositions(0, 0);
+      }},
+      render(gl, args) {{
+        const launchGround = this.map.queryTerrainElevation(launchCoordinate); const impactGround = this.map.queryTerrainElevation(impactCoordinate);
+        if (launchGround !== null && impactGround !== null && Number.isFinite(launchGround) && Number.isFinite(impactGround)) {{
+          const offsets = [launchGround - launchAltitude, impactGround - impactAltitude];
+          if (this.lastOffsets === null || Math.abs(offsets[0] - this.lastOffsets[0]) > 0.5 || Math.abs(offsets[1] - this.lastOffsets[1]) > 0.5) {{
+            this.updatePositions(offsets[0], offsets[1]); this.lastOffsets = offsets;
+          }}
+        }}
+        gl.useProgram(this.program); gl.uniformMatrix4fv(gl.getUniformLocation(this.program, 'u_matrix'), false, args.defaultProjectionData.mainMatrix);
+        gl.uniform2f(gl.getUniformLocation(this.program, 'u_resolution'), gl.drawingBufferWidth, gl.drawingBufferHeight); gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+        const stride = 10 * Float32Array.BYTES_PER_ELEMENT;
+        const attributes = [['a_prev',3,0],['a_curr',3,3],['a_next',3,6],['a_side',1,9]];
+        for (const [name,size,offset] of attributes) {{ const location = gl.getAttribLocation(this.program,name); gl.enableVertexAttribArray(location); gl.vertexAttribPointer(location,size,gl.FLOAT,false,stride,offset*Float32Array.BYTES_PER_ELEMENT); }}
+        gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); const color = gl.getUniformLocation(this.program, 'u_color'); const width = gl.getUniformLocation(this.program, 'u_width');
+        gl.uniform4f(color,1,1,1,1); gl.uniform1f(width,10); gl.drawArrays(gl.TRIANGLE_STRIP,0,this.vertexCount*2);
+        gl.uniform4f(color,0,0,0,1); gl.uniform1f(width,6); gl.drawArrays(gl.TRIANGLE_STRIP,0,this.vertexCount*2);
+        for (const [name] of attributes) gl.disableVertexAttribArray(gl.getAttribLocation(this.program,name)); gl.bindBuffer(gl.ARRAY_BUFFER,null); gl.useProgram(null);
+      }}
+    }};
+    map.addLayer(flightLayer);
+  }}
+  map.addLayer({{id:'ep-points',type:'circle',source:'ep-overlays',filter:['in',['get','kind'],['literal',['launch','impact']]],paint:{{'circle-radius':8,'circle-color':['match',['get','kind'],'launch','#16803c','#d62828'],'circle-stroke-color':'#fff','circle-stroke-width':2}}}});
+  map.addLayer({{id:'ep-labels',type:'symbol',source:'ep-overlays',filter:['in',['get','kind'],['literal',['launch','impact']]],layout:{{'text-field':['get','label'],'text-offset':[0,1.2],'text-size':12,'text-allow-overlap':true}},paint:{{'text-color':'#111827','text-halo-color':'#fff','text-halo-width':1.5}}}});
+  const bounds = new maplibregl.LngLatBounds(launchCoordinate, launchCoordinate).extend(impactCoordinate);
+  map.fitBounds(bounds, {{padding:70,maxZoom:13,pitch:45,duration:0}});
+  map.on('click', (event) => new maplibregl.Popup().setLngLat(event.lngLat).setText(`${{event.lngLat.lat.toFixed(5)}}, ${{event.lngLat.lng.toFixed(5)}}`).addTo(map));
+}});
+</script>
+<div style="position:absolute;right:6px;bottom:4px;z-index:3;background:#ffffffdd;padding:3px 6px;font:11px sans-serif;color:#222">
+<a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre</a> | <a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">&copy; Mapterhorn</a> | <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> | <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">&copy; OpenStreetMap</a>
+</div></body></html>"""
 
 
 @callback(
@@ -331,6 +394,8 @@ def update_physics_shot(launch_mgrs, launch_altitude, velocity, launch_angle_mil
         max_ordinate = float(max_ordinate)
         model_tof = float(model_tof)
         model_drift = float(model_drift)
+        if model_range <= 0:
+            raise ValueError("The physics model returned an invalid range.")
         data["t2"] = data["t"] / data["t"].max() * model_tof
         data["x2"] = data["x"] / data["x"].max() * model_range
         height_gain = data["y"] - launch_altitude
@@ -339,6 +404,8 @@ def update_physics_shot(launch_mgrs, launch_altitude, velocity, launch_angle_mil
             data["y2"] = height_gain / max_height_gain * (max_ordinate - launch_altitude) + launch_altitude
         else:
             data["y2"] = data["y"]
+        height_correction = launch_altitude - float(data["y2"].iloc[-1])
+        data["y2"] += data["x2"] / model_range * height_correction
 
         data["drift_calc"] = np.arctan2(data["z"], data["x"]) / math.pi * 3200
         drift_window = data["drift_calc"].iloc[-5:]
@@ -365,6 +432,16 @@ def update_physics_shot(launch_mgrs, launch_altitude, velocity, launch_angle_mil
         impact_lat, impact_lon = zf.vPolar(launch_lat, launch_lon, impact_bearing, float(final_x))
         impact = (impact_lat, impact_lon)
         impact_mgrs = zf.LL2MGRS(impact_lat, impact_lon)[1]
+        flight_path = []
+        for _, sample in data.iterrows():
+            progress = min(max(float(sample["x2"]) / model_range, 0.0), 1.0)
+            along_track = progress * float(final_x)
+            lateral_drift = float(sample["z2"]) * float(final_x) / model_range
+            path_distance = math.hypot(along_track, lateral_drift)
+            path_bearing = gt_azimuth_deg + math.degrees(math.atan2(lateral_drift, along_track))
+            latitude, longitude = zf.vPolar(launch_lat, launch_lon, path_bearing, path_distance)
+            flight_path.append([float(longitude), float(latitude), float(sample["y2"]), progress])
+        flight_path[-1] = [float(impact_lon), float(impact_lat), launch_altitude, 1.0]
         map_html = _build_map(
             launch,
             impact,
@@ -372,6 +449,8 @@ def update_physics_shot(launch_mgrs, launch_altitude, velocity, launch_angle_mil
             impact_mgrs,
             impact_bearing,
             float(final_x),
+            flight_path,
+            launch_altitude,
         )
 
         figure = _trajectory_figure(data, model_range)

@@ -2,15 +2,13 @@
 
 import base64
 import io
-import math
+import json
 import os
 
 import dash
-import folium
 import pandas as pd
 from dash import Input, Output, State, callback, dash_table, dcc, html
 import dash_bootstrap_components as dbc
-from folium import plugins
 
 from SubApps import z_functions as zf
 
@@ -22,14 +20,106 @@ DEFAULT_IMPACT_MGRS = "29RPR6518104660"
 def _impact_preview_map(mgrs):
     """Show the impact point immediately, before a spreadsheet is processed."""
     point = zf.MGRS2LL(mgrs)
-    fmap = folium.Map(location=[point[1], point[2]], zoom_start=8)
-    folium.TileLayer("OpenStreetMap", name="Open Street Map").add_to(fmap)
-    folium.Marker(
-        [point[1], point[2]],
-        tooltip="Impact Point",
-        icon=folium.Icon(color="red", icon="crosshairs", prefix="fa"),
-    ).add_to(fmap)
-    return fmap.get_root().render()
+    return _render_map((float(point[1]), float(point[2])), [], preview=True)
+
+
+def _script_json(value):
+    """Serialize data safely for embedding in an inline script in the map iframe."""
+    return (
+        json.dumps(value, ensure_ascii=False)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
+
+
+def _render_map(impact, locations, preview=False):
+    impact_lat, impact_lon = impact
+    features = [
+        {
+            "type": "Feature",
+            "properties": {"kind": "impact", "label": "Impact Point", "details": "Impact Point"},
+            "geometry": {"type": "Point", "coordinates": [impact_lon, impact_lat]},
+        }
+    ]
+    features.extend(
+        {
+            "type": "Feature",
+            "properties": {"kind": "location", "label": item["label"], "details": item["details"]},
+            "geometry": {"type": "Point", "coordinates": [item["lon"], item["lat"]]},
+        }
+        for item in locations
+    )
+    data_json = _script_json({"type": "FeatureCollection", "features": features})
+    impact_json = _script_json([impact_lon, impact_lat])
+    preview_js = "true" if preview else "false"
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://unpkg.com/maplibre-gl@6.19.0/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+html,body,#jd-map{{width:100%;height:100%;margin:0;overflow:hidden}}
+.jd-attribution{{position:absolute;right:6px;bottom:4px;z-index:3;background:#ffffffdf;padding:4px 7px;font:11px sans-serif;color:#222}}
+.jd-attribution a{{color:#1558a6;text-decoration:none}}
+</style></head><body><div id="jd-map"></div>
+<script type="module">
+import * as maplibregl from 'https://unpkg.com/maplibre-gl@6.19.0/dist/maplibre-gl.mjs';
+const data = {data_json};
+const impact = {impact_json};
+const preview = {preview_js};
+const map = new maplibregl.Map({{
+  container:'jd-map', style:'https://tiles.openfreemap.org/styles/liberty',
+  center:impact, zoom:preview ? 8 : 5, pitch:preview ? 30 : 40, maxPitch:85,
+  dragRotate:true, touchZoomRotate:true
+}});
+map.addControl(new maplibregl.NavigationControl({{visualizePitch:true}}), 'top-right');
+map.addControl(new maplibregl.ScaleControl({{maxWidth:120, unit:'metric'}}), 'bottom-left');
+map.addControl(new maplibregl.FullscreenControl(), 'top-right');
+map.once('style.load', () => {{
+  map.addSource('jd-elevation', {{type:'raster-dem', url:'https://tiles.mapterhorn.com/tilejson.json'}});
+  const firstLabel = map.getStyle().layers.find((layer) => layer.type === 'symbol');
+  map.addLayer({{id:'jd-hillshade',type:'hillshade',source:'jd-elevation',paint:{{'hillshade-exaggeration':0.35}}}}, firstLabel && firstLabel.id);
+  map.setTerrain({{source:'jd-elevation',exaggeration:1.0}});
+  map.setSky({{'sky-color':'#081522','sky-horizon-blend':0.35,'atmosphere-blend':0.8}});
+  map.addSource('jd-points', {{type:'geojson',data}});
+  map.addLayer({{id:'jd-location-points',type:'circle',source:'jd-points',filter:['==',['get','kind'],'location'],paint:{{'circle-radius':5,'circle-color':'#1976d2','circle-opacity':0.9,'circle-stroke-color':'#fff','circle-stroke-width':1.25}}}});
+  map.addLayer({{id:'jd-impact-point',type:'circle',source:'jd-points',filter:['==',['get','kind'],'impact'],paint:{{'circle-radius':9,'circle-color':'#d62828','circle-stroke-color':'#fff','circle-stroke-width':2}}}});
+  const popup = new maplibregl.Popup({{closeButton:false,closeOnClick:false}});
+  map.on('mouseenter','jd-location-points', (event) => {{
+    map.getCanvas().style.cursor = 'pointer';
+    const feature = event.features && event.features[0];
+    if (feature) popup.setLngLat(event.lngLat).setText(feature.properties.label || 'Location').addTo(map);
+  }});
+  map.on('mousemove','jd-location-points', (event) => {{
+    const feature = event.features && event.features[0];
+    if (feature) popup.setLngLat(event.lngLat).setText(feature.properties.label || 'Location');
+  }});
+  map.on('mouseleave','jd-location-points', () => {{ map.getCanvas().style.cursor = ''; popup.remove(); }});
+  map.on('click','jd-location-points', (event) => {{
+    const feature = event.features && event.features[0];
+    if (feature) new maplibregl.Popup().setLngLat(event.lngLat).setText(feature.properties.details || feature.properties.label || 'Location').addTo(map);
+  }});
+  map.on('click','jd-impact-point', (event) => new maplibregl.Popup().setLngLat(event.lngLat).setText('Impact Point').addTo(map));
+  if (!preview && data.features.length > 1) {{
+    const box = new maplibregl.LngLatBounds(impact, impact);
+    for (const feature of data.features) {{
+      if (feature.geometry.type !== 'Point') continue;
+      const [lon, lat] = feature.geometry.coordinates;
+      const wrappedLon = impact[0] + ((((lon - impact[0]) + 540) % 360) - 180);
+      box.extend([wrappedLon, lat]);
+    }}
+    map.fitBounds(box, {{padding:45,maxZoom:14,pitch:40,duration:0}});
+  }}
+}});
+</script>
+<div class="jd-attribution">
+<a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre</a> |
+<a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">&copy; Mapterhorn</a> |
+<a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> |
+<a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">&copy; OpenMapTiles</a> |
+Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+</div></body></html>"""
 
 
 layout = dbc.Container(
@@ -214,41 +304,22 @@ def show_impact_point(mgrs):
 
 
 def _map_figure(frame, impact, name_col, description_col, type_col, lat_col, lon_col):
-    impact_lat, impact_lon = impact
-    fmap = folium.Map(location=[impact_lat, impact_lon], zoom_start=5)
-    folium.TileLayer("OpenStreetMap", name="Open Street Map").add_to(fmap)
-    for layer, name in (("m", "Google Maps"), ("s", "Google Satellite"), ("p", "Google Terrain")):
-        folium.TileLayer(
-            tiles=f"https://mt1.google.com/vt/lyrs={layer}&x={{x}}&y={{y}}&z={{z}}",
-            attr="Google", name=name, overlay=False, control=True,
-        ).add_to(fmap)
-    folium.LayerControl().add_to(fmap)
-    fmap.add_child(plugins.MiniMap(toggle_display=True))
-    plugins.ScrollZoomToggler().add_to(fmap)
-    plugins.Fullscreen(position="topright").add_to(fmap)
-    icons_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Icons")
-    impact_path = os.path.join(icons_dir, "target.png")
-    impact_icon = folium.features.CustomIcon(impact_path, icon_size=(25, 25)) if os.path.exists(impact_path) else folium.Icon(color="red", icon="crosshairs", prefix="fa")
-    folium.Marker([impact_lat, impact_lon], popup="Impact Point", tooltip="Impact Point", icon=impact_icon).add_to(fmap)
+    locations = []
     for _, row in frame.iterrows():
-        label = str(row.get(name_col, "Location"))
+        label = str(row.get(name_col, "Location")) if pd.notna(row.get(name_col)) else "Location"
         details = [f"{label}"]
         if description_col in frame.columns and pd.notna(row.get(description_col)):
             details.append(str(row[description_col]))
         if type_col in frame.columns and pd.notna(row.get(type_col)):
             details.append(f"Type: {row[type_col]}")
-        folium.CircleMarker(
-            location=[float(row[lat_col]), float(row[lon_col])], radius=4,
-            color="blue", fill=True, fill_color="blue", fill_opacity=0.8,
-            tooltip=label, popup="<br>".join(details),
-        ).add_to(fmap)
-    plugins.Draw().add_to(fmap)
-    fmap.add_child(folium.LatLngPopup())
-    bounds = [(impact_lat, impact_lon)] + [
-        (float(row[lat_col]), float(row[lon_col])) for _, row in frame.iterrows()
-    ]
-    fmap.fit_bounds(bounds, padding=(24, 24), max_zoom=14)
-    return fmap.get_root().render()
+        details.append(f"Distance: {float(row['Distance (meters)']):,.1f} m")
+        locations.append({
+            "label": label,
+            "details": "\n".join(details),
+            "lat": float(row[lat_col]),
+            "lon": float(row[lon_col]),
+        })
+    return _render_map(impact, locations)
 
 
 @callback(

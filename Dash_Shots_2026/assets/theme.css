@@ -1,0 +1,215 @@
+:root {
+  color-scheme: dark;
+  --bs-body-bg: #0b1424;
+  --bs-body-color: #e6efff;
+  --bs-emphasis-color: #f4f8ff;
+  --bs-secondary-color: #a6b6cc;
+  --bs-secondary-bg: #14233a;
+  --bs-tertiary-bg: #101d30;
+  --bs-border-color: #263b58;
+  --bs-primary: #3b82f6;
+  --bs-primary-rgb: 59, 130, 246;
+  --bs-link-color: #78b4ff;
+  --bs-link-hover-color: #a1ccff;
+  --bs-card-bg: #111f34;
+  --bs-card-cap-bg: #142640;
+  --bs-form-control-bg: #0d192b;
+  --bs-form-control-color: #e6efff;
+  --bs-form-control-border-color: #304866;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: #0b1424;
+  color: #e6efff;
+}
+
+body {
+  background-image: radial-gradient(ellipse at 70% 0%, #142746 0, #0b1424 52%);
+}
+
+.app-sidebar {
+  z-index: 20;
+  overflow-y: auto;
+  background: linear-gradient(180deg, #0d1b30 0%, #091322 100%);
+  border-right: 1px solid #203a5b;
+  box-shadow: 10px 0 28px #02081755;
+}
+
+.app-sidebar h3 {
+  color: #f4f8ff;
+  letter-spacing: 0.01em;
+}
+
+.app-sidebar hr {
+  border-color: #294365;
+  opacity: 1;
+}
+
+.app-sidebar .nav-link {
+  color: #b8c9df;
+  border: 1px solid transparent;
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
+}
+
+.app-sidebar .nav-link:hover {
+  color: #fff;
+  background: #17304f;
+  border-color: #284a73;
+}
+
+.app-sidebar .nav-link.active {
+  color: #fff;
+  background: linear-gradient(100deg, #1762c4, #2678df);
+  box-shadow: 0 5px 16px #1263cf40;
+}
+
+.app-content {
+  min-height: 100vh;
+  color: var(--bs-body-color);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.form-label,
+.fw-bold,
+strong {
+  color: #edf4ff;
+}
+
+.text-muted {
+  color: #9fb1c9 !important;
+}
+
+.card {
+  color: var(--bs-body-color);
+  background: linear-gradient(145deg, #13233a, #101c2f);
+  border: 1px solid #263d5b;
+  border-radius: 0.8rem;
+  box-shadow: 0 12px 28px #02081735;
+}
+
+.card-header {
+  color: #e8f1ff;
+  background: linear-gradient(100deg, #172d4b, #142640);
+  border-bottom: 1px solid #2a4364;
+  font-weight: 650;
+}
+
+.card-body {
+  color: #d8e4f5;
+}
+
+.form-control,
+.form-select,
+.input-group-text {
+  color: #e6efff;
+  background-color: #0b182a;
+  border-color: #304866;
+}
+
+.form-control::placeholder {
+  color: #8296b0;
+}
+
+.form-control:focus,
+.form-select:focus {
+  color: #f4f8ff;
+  background-color: #0d1c31;
+  border-color: #4c9aff;
+  box-shadow: 0 0 0 0.22rem #3b82f633;
+}
+
+.form-select option {
+  color: #e6efff;
+  background: #0d192b;
+}
+
+.btn-primary {
+  --bs-btn-bg: #246fd0;
+  --bs-btn-border-color: #347fe0;
+  --bs-btn-hover-bg: #347fe0;
+  --bs-btn-hover-border-color: #5a9bfa;
+  --bs-btn-active-bg: #1b5fb9;
+}
+
+.btn-secondary,
+.btn-outline-secondary {
+  --bs-btn-color: #d5e4f7;
+  --bs-btn-bg: #1b2c44;
+  --bs-btn-border-color: #3a5474;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #294364;
+  --bs-btn-hover-border-color: #4a6b93;
+}
+
+.alert {
+  color: #e6efff;
+  background-color: #14243a;
+  border-color: #2b4567;
+}
+
+.table {
+  --bs-table-color: #dce8f8;
+  --bs-table-bg: #111f34;
+  --bs-table-border-color: #2a405d;
+  --bs-table-striped-bg: #162740;
+  --bs-table-hover-bg: #1a3150;
+  --bs-table-hover-color: #fff;
+}
+
+.dash-spreadsheet-container .dash-spreadsheet-inner table {
+  --accent: #3b82f6;
+  color: #dce8f8 !important;
+}
+
+.dash-spreadsheet-container .dash-spreadsheet-inner th {
+  color: #eaf2ff !important;
+  background-color: #18304e !important;
+  border-color: #304866 !important;
+}
+
+.dash-spreadsheet-container .dash-spreadsheet-inner td {
+  color: #dce8f8 !important;
+  background-color: #111f34 !important;
+  border-color: #2a405d !important;
+}
+
+.dash-spreadsheet-container .dash-spreadsheet-inner tr:nth-child(even) td {
+  background-color: #15263d !important;
+}
+
+.dash-spreadsheet-container input {
+  color: #e6efff !important;
+  background: #0b182a !important;
+}
+
+.dash-table-container .previous-next-container button,
+.dash-table-container .previous-next-container select {
+  color: #dce8f8 !important;
+  background: #14243a !important;
+}
+
+hr {
+  border-color: #294365;
+  opacity: 0.8;
+}
+
+@media (max-width: 760px) {
+  .app-sidebar {
+    position: relative !important;
+    width: 100% !important;
+    min-height: auto;
+    padding: 1rem !important;
+  }
+
+  .app-content {
+    margin: 0 !important;
+    padding: 1rem !important;
+  }
+}
